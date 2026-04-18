@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String                 @id @default(uuid())
+  name           String
+  email          String                 @unique
+  passwordHash   String
+  createdAt      DateTime               @default(now())
+  members        Member[]
+  categories     Category[]
+  rules          TransactionRule[]
+  consolidations MonthlyConsolidation[]
+}
+
+model Member {
+  id           String            @id @default(uuid())
+  name         String
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  rules        TransactionRule[]
+  budgetItems  BudgetItem[]
+  createdAt    DateTime          @default(now())
+}
+
+model Category {
+  id           String            @id @default(uuid())
+  name         String
+  type         CategoryType
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  rules        TransactionRule[]
+  budgetItems  BudgetItem[]
+}
+
+model TransactionRule {
+  id                String          @id @default(uuid())
+  description       String
+  amount            Decimal
+  type              TransactionType
+  expenseType       ExpenseType?
+  memberId          String
+  categoryId        String
+  userId            String
+  ruleType          RuleType
+  recurrence        RecurrenceType?
+  startDate         DateTime
+  endDate           DateTime?
+  totalInstallments Int?
+  isVariable        Boolean         @default(false)
+  member            Member          @relation(fields: [memberId], references: [id])
+  category          Category        @relation(fields: [categoryId], references: [id])
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions      Transaction[]
+  budgetItems       BudgetItem[]
+  createdAt         DateTime        @default(now())
+}
+
+model Transaction {
+  id                String                @id @default(uuid())
+  amount            Decimal
+  description       String?
+  date              DateTime
+  type              TransactionType
+  memberId          String
+  categoryId        String
+  ruleId            String?
+  installmentNumber Int?
+  /// Populated when this transaction is created via the consolidation flow
+  consolidationId   String?
+  /// Categorises expenses into Fixed / Variable / Investment / Transfer
+  expenseType       ExpenseType?
+  /// Free-text note (e.g. "conta veio mais barata por desconto")
+  note              String?
+  member            Member                @relation(fields: [memberId], references: [id])
+  category          Category              @relation(fields: [categoryId], references: [id])
+  rule              TransactionRule?      @relation(fields: [ruleId], references: [id])
+  consolidation     MonthlyConsolidation? @relation(fields: [consolidationId], references: [id])
+  /// Reverse side of BudgetItem.transaction (one-to-one)
+  budgetItem        BudgetItem?
+  createdAt         DateTime              @default(now())
+
+  @@index([consolidationId])
+  @@index([memberId])
+  @@index([categoryId])
+}
+
+// ─── Consolidation models ─────────────────────────────────────────────────────
+
+/// Represents a closed accounting period (one per user per month/year).
+model MonthlyConsolidation {
+  id           String              @id @default(uuid())
+  userId       String
+  month        Int
+  year         Int
+  status       ConsolidationStatus @default(OPEN)
+  closedAt     DateTime?
+  createdAt    DateTime            @default(now())
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        BudgetItem[]
+  transactions Transaction[]
+
+  @@unique([userId, month, year])
+  @@index([userId, year, month])
+}
+
+/// A single planned entry within a consolidation period.
+/// May originate from a TransactionRule (ruleId set) or be created manually (avulso).
+/// Once confirmed, transactionId points to the realised Transaction.
+model BudgetItem {
+  id                String               @id @default(uuid())
+  consolidationId   String
+  /// Source rule — null for manually-added (avulso) items.
+  /// The @@unique below prevents duplicate generation for the same rule in one period.
+  ruleId            String?
+  memberId          String
+  categoryId        String
+  type              TransactionType
+  /// Snapshot amount — editing this NEVER alters the originating TransactionRule.
+  amount            Decimal
+  description       String
+  dueDate           DateTime
+  installmentNumber Int?
+  status            BudgetItemStatus     @default(PENDING)
+  expenseType       ExpenseType?
+  note              String?
+  /// Set when the item is confirmed (PAID or RECEIVED). One-to-one with Transaction.
+  transactionId     String?              @unique
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  consolidation     MonthlyConsolidation @relation(fields: [consolidationId], references: [id], onDelete: Cascade)
+  rule              TransactionRule?     @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  member            Member               @relation(fields: [memberId], references: [id])
+  category          Category             @relation(fields: [categoryId], references: [id])
+  /// onDelete: SetNull — if the Transaction is deleted (reversal), clear the reference automatically
+  transaction       Transaction?         @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  /// Prevents duplicate auto-generation: one BudgetItem per rule per consolidation.
+  /// In PostgreSQL NULL != NULL, so multiple avulso items (ruleId = null) are still allowed.
+  @@unique([consolidationId, ruleId])
+  @@index([consolidationId, status])
+  @@index([consolidationId, type])
+  @@index([ruleId])
+  @@index([memberId])
+  @@index([categoryId])
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum RuleType {
+  RECURRING
+  INSTALLMENT
+}
+
+enum RecurrenceType {
+  MONTHLY
+  WEEKLY
+  YEARLY
+}
+
+enum ConsolidationStatus {
+  OPEN
+  CLOSED
+}
+
+enum BudgetItemStatus {
+  PENDING
+  PAID
+  RECEIVED
+  CANCELLED
+}
+
+enum ExpenseType {
+  FIXED
+  VARIABLE
+  INVESTMENT
+  TRANSFER
+}
