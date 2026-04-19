@@ -4,11 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
-import { DailyFlowChart, MemberBreakdown, CategoryBreakdown, PressureCalendar } from '@/components/dashboard';
+import { DailyFlowChart, MemberBreakdown, CategoryBreakdown, BestDatesPanel } from '@/components/dashboard';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
-  const { selectedMonth, selectedYear, setMonth, setYear, consolidation, summary, dailyFlow, calendarPressure, isLoading, error } = useDashboard();
+  const { selectedMonth, selectedYear, setMonth, setYear, consolidation, summary, dailyFlow, bestDates, isLoading, error } = useDashboard();
 
   const navigateMonth = (delta: number) => {
     let newMonth = selectedMonth + delta;
@@ -198,8 +198,8 @@ export function DashboardPage() {
         {summary.byCategory && <CategoryBreakdown categories={summary.byCategory} month={selectedMonth} year={selectedYear} />}
       </div>
 
-      {/* Calendário de pressão */}
-      {calendarPressure && <PressureCalendar data={calendarPressure} month={selectedMonth} year={selectedYear} />}
+      {/* Melhores datas */}
+      {bestDates && <BestDatesPanel data={bestDates} />}
     </div>
   );
 }

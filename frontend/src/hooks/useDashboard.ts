@@ -50,21 +50,21 @@ interface DailyFlow {
   balance: number;
 }
 
-interface CalendarDay {
-  day: number;
+interface BestDate {
   date: string;
+  day: number;
+  month: number;
+  year: number;
+  cumulativeBalance: number;
   dailyIncome: number;
   dailyExpense: number;
-  cumulativeBalance: number;
-  pressure: 'LOW' | 'MEDIUM' | 'HIGH' | 'POSITIVE';
-  items: Array<{
-    id: string;
+  rank: 'ÓTIMO' | 'BOM' | 'OK' | 'RUIM';
+  committedItems: Array<{
     description: string;
     amount: number;
     type: string;
     status: string;
     memberName: string;
-    categoryName: string;
   }>;
 }
 
@@ -82,7 +82,7 @@ export function useDashboard() {
   const [consolidation, setConsolidation] = useState<MonthlyConsolidation | null>(null);
   const [summary, setSummary] = useState<ConsolidationSummary | null>(null);
   const [dailyFlow, setDailyFlow] = useState<DailyFlow[] | null>(null);
-  const [calendarPressure, setCalendarPressure] = useState<CalendarDay[] | null>(null);
+  const [bestDates, setBestDates] = useState<BestDate[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,26 +102,27 @@ export function useDashboard() {
         const consolidationRes = await api.get(`/consolidations?month=${selectedMonth}&year=${selectedYear}`);
         if (consolidationRes) {
           setConsolidation(consolidationRes as MonthlyConsolidation);
-          const [summaryRes, dailyFlowRes, calendarPressureRes] = await Promise.all([
-            api.get(`/consolidations/${(consolidationRes as MonthlyConsolidation).id}/summary`),
-            api.get(`/consolidations/${(consolidationRes as MonthlyConsolidation).id}/daily-flow`),
-            api.get(`/consolidations/${(consolidationRes as MonthlyConsolidation).id}/calendar-pressure`),
+          const consolidation = consolidationRes as MonthlyConsolidation;
+          const [summaryRes, dailyFlowRes, bestDatesRes] = await Promise.all([
+            api.get(`/consolidations/${consolidation.id}/summary`),
+            api.get(`/consolidations/${consolidation.id}/daily-flow`),
+            api.get(`/consolidations/best-dates?months=2&month=${selectedMonth}&year=${selectedYear}`),
           ]);
           setSummary(summaryRes as ConsolidationSummary);
           setDailyFlow(dailyFlowRes as DailyFlow[]);
-          setCalendarPressure(calendarPressureRes as CalendarDay[]);
+          setBestDates(bestDatesRes as BestDate[]);
         } else {
           setConsolidation(null);
           setSummary(null);
           setDailyFlow(null);
-          setCalendarPressure(null);
+          setBestDates(null);
         }
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar dados');
         setConsolidation(null);
         setSummary(null);
         setDailyFlow(null);
-        setCalendarPressure(null);
+        setBestDates(null);
       } finally {
         setIsLoading(false);
       }
@@ -138,7 +139,7 @@ export function useDashboard() {
     consolidation,
     summary,
     dailyFlow,
-    calendarPressure,
+    bestDates,
     isLoading,
     error,
   };

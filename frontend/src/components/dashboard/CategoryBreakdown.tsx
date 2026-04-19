@@ -163,7 +163,7 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
       </Card>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full sm:max-w-lg max-h-[calc(100vh-4rem)] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Lançamentos — {selectedCategory?.category.name} — {capitalizedMonth} {year}</SheetTitle>
           </SheetHeader>

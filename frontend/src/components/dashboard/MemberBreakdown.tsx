@@ -106,7 +106,7 @@ export function MemberBreakdown({ members, month, year }: Props) {
       </Card>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full sm:max-w-lg max-h-[calc(100vh-4rem)] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Lançamentos — {selectedMember?.member.name} — {capitalizedMonth} {year}</SheetTitle>
           </SheetHeader>

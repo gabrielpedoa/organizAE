@@ -360,7 +360,7 @@ export class ConsolidationService {
       string,
       { member: Item['member']; planned: number; realized: number; items: Item[] }
     >();
-    for (const item of active) {
+    for (const item of active.filter((i) => i.type === TransactionType.EXPENSE)) {
       if (!memberMap.has(item.memberId)) {
         memberMap.set(item.memberId, { member: item.member, planned: 0, realized: 0, items: [] });
       }
@@ -524,106 +524,125 @@ export class ConsolidationService {
     return result;
   }
 
-  async getCalendarPressure(userId: string, consolidationId: string) {
-    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
-      where: { id: consolidationId, userId },
+  async getBestDates(userId: string, month: number, year: number, months = 2) {
+    const requestedMonths = Math.max(1, months);
+    const monthRanges = Array.from({ length: requestedMonths }, (_, index) => {
+      const date = new Date(Date.UTC(year, month - 1 + index, 1));
+      return { month: date.getUTCMonth() + 1, year: date.getUTCFullYear() };
+    });
+
+    const consolidations = await this.prisma.monthlyConsolidation.findMany({
+      where: {
+        userId,
+        OR: monthRanges.map((range) => ({ month: range.month, year: range.year })),
+      },
       include: {
         items: {
           include: { member: true, category: true, transaction: true },
         },
       },
+      orderBy: [{ year: 'asc' }, { month: 'asc' }],
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
 
-    const year = consolidation.year;
-    const month = consolidation.month;
-    const daysInMonth = new Date(year, month, 0).getDate();
+    const results: Array<{
+      date: string;
+      day: number;
+      month: number;
+      year: number;
+      cumulativeBalance: number;
+      dailyIncome: number;
+      dailyExpense: number;
+      rank: 'ÓTIMO' | 'BOM' | 'OK' | 'RUIM';
+      committedItems: Array<{ description: string; amount: number; type: string; status: string; memberName: string }>;
+    }> = [];
 
-    const dailyMap = new Map<number, { dailyIncome: number; dailyExpense: number; cumulativeBalance: number; items: any[] }>();
-    let cumulativeBalance = 0;
+    for (const consolidation of consolidations) {
+      const consolidationYear = consolidation.year;
+      const consolidationMonth = consolidation.month;
+      const daysInMonth = new Date(Date.UTC(consolidationYear, consolidationMonth, 0)).getUTCDate();
+      const dailyData = Array.from({ length: daysInMonth }, (_, index) => ({
+        day: index + 1,
+        date: `${consolidationYear}-${String(consolidationMonth).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`,
+        month: consolidationMonth,
+        year: consolidationYear,
+        dailyIncome: 0,
+        dailyExpense: 0,
+        cumulativeBalance: 0,
+        rank: 'RUIM' as const,
+        committedItems: [] as Array<{ description: string; amount: number; type: string; status: string; memberName: string }> ,
+      }));
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      dailyMap.set(day, { dailyIncome: 0, dailyExpense: 0, cumulativeBalance: 0, items: [] });
-    }
+      const activeItems = consolidation.items.filter((item) => item.status !== BudgetItemStatus.CANCELLED);
+      const totalIncomePlanned = activeItems
+        .filter((item) => item.type === TransactionType.INCOME)
+        .reduce((sum, item) => sum + Number(item.amount), 0);
 
-    // First, process realized transactions
-    for (const item of consolidation.items) {
-      if (item.transaction && (item.status === BudgetItemStatus.PAID || item.status === BudgetItemStatus.RECEIVED)) {
-        const day = item.transaction.date.getUTCDate();
-        const amount = Number(item.transaction.amount);
-        if (item.type === TransactionType.INCOME) {
-          dailyMap.get(day)!.dailyIncome += amount;
-        } else {
-          dailyMap.get(day)!.dailyExpense += amount;
+      for (const item of activeItems) {
+        if (item.transaction && (item.status === BudgetItemStatus.PAID || item.status === BudgetItemStatus.RECEIVED)) {
+          const txDate = item.transaction.date;
+          if (txDate.getUTCFullYear() === consolidationYear && txDate.getUTCMonth() + 1 === consolidationMonth) {
+            const day = txDate.getUTCDate();
+            if (item.type === TransactionType.INCOME) {
+              dailyData[day - 1].dailyIncome += Number(item.transaction.amount);
+            } else {
+              dailyData[day - 1].dailyExpense += Number(item.transaction.amount);
+            }
+            dailyData[day - 1].committedItems.push({
+              description: item.description,
+              amount: Number(item.transaction.amount),
+              type: item.type,
+              status: item.status,
+              memberName: item.member.name,
+            });
+          }
         }
-        dailyMap.get(day)!.items.push({
-          id: item.id,
-          description: item.description,
-          amount: Number(item.amount),
-          type: item.type,
-          status: item.status,
-          memberName: item.member.name,
-          categoryName: item.category.name,
-        });
-      }
-    }
 
-    // Then, process pending items by dueDate
-    for (const item of consolidation.items) {
-      if (item.status === BudgetItemStatus.PENDING) {
-        const day = item.dueDate.getUTCDate();
-        const amount = Number(item.amount);
-        if (item.type === TransactionType.INCOME) {
-          dailyMap.get(day)!.dailyIncome += amount;
-        } else {
-          dailyMap.get(day)!.dailyExpense += amount;
+        if (item.status === BudgetItemStatus.PENDING) {
+          const dueDate = item.dueDate;
+          if (dueDate.getUTCFullYear() === consolidationYear && dueDate.getUTCMonth() + 1 === consolidationMonth) {
+            const day = dueDate.getUTCDate();
+            if (item.type === TransactionType.INCOME) {
+              dailyData[day - 1].dailyIncome += Number(item.amount);
+            } else {
+              dailyData[day - 1].dailyExpense += Number(item.amount);
+            }
+            dailyData[day - 1].committedItems.push({
+              description: item.description,
+              amount: Number(item.amount),
+              type: item.type,
+              status: item.status,
+              memberName: item.member.name,
+            });
+          }
         }
-        dailyMap.get(day)!.items.push({
-          id: item.id,
-          description: item.description,
-          amount: Number(item.amount),
-          type: item.type,
-          status: item.status,
-          memberName: item.member.name,
-          categoryName: item.category.name,
-        });
       }
-    }
 
-    // Calculate cumulative balance and pressure
-    const totalIncomePlanned = consolidation.items
-      .filter(i => i.type === TransactionType.INCOME)
-      .reduce((sum, i) => sum + Number(i.amount), 0);
+      let cumulativeBalance = 0;
+      for (const dayData of dailyData) {
+        cumulativeBalance += dayData.dailyIncome - dayData.dailyExpense;
+        dayData.cumulativeBalance = cumulativeBalance;
 
-    const result = [];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const { dailyIncome, dailyExpense, items } = dailyMap.get(day)!;
-      cumulativeBalance += dailyIncome - dailyExpense;
-      let pressure: 'LOW' | 'MEDIUM' | 'HIGH' | 'POSITIVE';
-      if (cumulativeBalance > 0) {
-        pressure = 'POSITIVE';
-      } else {
+        const threshold70 = totalIncomePlanned * 0.7;
+        const threshold40 = totalIncomePlanned * 0.4;
         const threshold10 = totalIncomePlanned * 0.1;
-        const threshold30 = totalIncomePlanned * 0.3;
-        if (cumulativeBalance >= -threshold10) {
-          pressure = 'LOW';
-        } else if (cumulativeBalance >= -threshold30) {
-          pressure = 'MEDIUM';
+
+        if (totalIncomePlanned <= 0) {
+          dayData.rank = 'RUIM';
+        } else if (cumulativeBalance > threshold70) {
+          dayData.rank = 'ÓTIMO' as any;
+        } else if (cumulativeBalance >= threshold40) {
+          dayData.rank = 'BOM' as any;
+        } else if (cumulativeBalance >= threshold10) {
+          dayData.rank = 'OK' as any;
         } else {
-          pressure = 'HIGH';
+          dayData.rank = 'RUIM';
         }
+
+        results.push(dayData);
       }
-      result.push({
-        day,
-        date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-        dailyIncome,
-        dailyExpense,
-        cumulativeBalance,
-        pressure,
-        items,
-      });
     }
-    return result;
+
+    return results;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

@@ -63,10 +63,18 @@ export class ConsolidationController {
     return this.consolidation.getDailyFlow(user.id, id);
   }
 
-  /** Calendar pressure: cumulative balance and pressure per day. */
-  @Get(":id/calendar-pressure")
-  calendarPressure(@CurrentUser() user: JwtUser, @Param("id") id: string) {
-    return this.consolidation.getCalendarPressure(user.id, id);
+  /** Best dates for new commitments over the current and next month. */
+  @Get("best-dates")
+  bestDates(
+    @CurrentUser() user: JwtUser,
+    @Query("months") months: string,
+    @Query("month") month: string,
+    @Query("year") year: string,
+  ) {
+    const requestedMonths = Number(months) || 2;
+    const selectedMonth = month ? Number(month) : new Date().getUTCMonth() + 1;
+    const selectedYear = year ? Number(year) : new Date().getUTCFullYear();
+    return this.consolidation.getBestDates(user.id, selectedMonth, selectedYear, requestedMonths);
   }
 
   /** Closes the period. Rejects if PENDING items remain unless force=true. */
