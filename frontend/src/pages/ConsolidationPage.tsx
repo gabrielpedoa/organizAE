@@ -8,17 +8,29 @@ import {
   ChevronRight,
   Lock,
   Plus,
+  RotateCcw,
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { AddBudgetItemModal } from '@/components/consolidation/AddBudgetItemModal';
 import { ConfirmPaymentModal } from '@/components/consolidation/ConfirmPaymentModal';
 import { EditBudgetItemModal } from '@/components/consolidation/EditBudgetItemModal';
 import { useConsolidation, ConfirmPaymentPayload, ConfirmReceiptPayload } from '@/hooks/useConsolidation';
 import { BudgetItem, BudgetItemStatus } from '@/lib/types';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, formatDateOnly } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,13 +44,11 @@ type Tab = 'pending' | 'paid' | 'cancelled';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDueDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+  return formatDateOnly(iso, { day: 'numeric', month: 'short' });
 }
 
 function formatFullDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatDateOnly(iso, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -207,15 +217,16 @@ function ItemRow({ item, onPay, onEdit, onCancel }: ItemRowProps) {
 export function ConsolidationPage() {
   const navigate = useNavigate();
   const {
-    month, year, consolidation, summary, isLoading,
+    month, year, consolidation, summary, isLoading, isResetting,
     confirmPayment, confirmReceipt,
-    cancelItem, updateItem, addItem, closeConsolidation, navigateMonth,
+    cancelItem, updateItem, addItem, closeConsolidation, resetConsolidation, navigateMonth,
   } = useConsolidation();
 
   const [activeTab, setActiveTab] = useState<Tab>('pending');
   const [paymentItem, setPaymentItem] = useState<BudgetItem | null>(null);
   const [editItem, setEditItem] = useState<BudgetItem | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const hasPending = (summary?.items.pending.length ?? 0) > 0;
   const isClosed = consolidation?.status === 'CLOSED';
@@ -315,6 +326,53 @@ export function ConsolidationPage() {
               <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar lançamento
             </Button>
           )}
+
+          {consolidation && (
+            <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="destructive" disabled={isResetting || isLoading}>
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Resetar consolidação
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Resetar consolidação?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>Esta ação irá:</p>
+                      <ul className="list-disc pl-4 space-y-1">
+                        <li>Remover todos os lançamentos exclusivos deste mês</li>
+                        <li>Devolver todos os itens recorrentes e parcelados para Pendente</li>
+                        <li>Reabrir o mês se estiver fechado</li>
+                      </ul>
+                      <p className="text-destructive font-medium">
+                        As transações confirmadas vinculadas a este período serão excluídas.
+                        Esta ação não pode ser desfeita.
+                      </p>
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      try {
+                        await resetConsolidation();
+                        setResetDialogOpen(false);
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Erro ao resetar');
+                      }
+                    }}
+                    disabled={isResetting}
+                  >
+                    {isResetting ? 'Resetando...' : 'Sim, resetar'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 
@@ -331,7 +389,7 @@ export function ConsolidationPage() {
         <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
           <span className="flex items-center gap-2">
             <Lock className="h-4 w-4" />
-            Período fechado em {new Date(summary.closedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            Período fechado em {formatDateOnly(summary.closedAt, { day: 'numeric', month: 'long', year: 'numeric' })}
           </span>
           <Button size="sm" variant="outline" onClick={() => navigate(`/consolidation/${consolidation!.id}`)}>
             Ver relatório

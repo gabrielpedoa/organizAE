@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TransactionRule, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CreateRuleDto } from './dto/create-rule.dto';
+import { UpdateRuleDto } from './dto/update-rule.dto';
+import { toMidnightUTC } from '../common/utils/date.utils';
 
 @Injectable()
 export class TransactionsService {
@@ -60,6 +62,55 @@ export class TransactionsService {
     return this.prisma.transaction.delete({ where: { id } });
   }
 
+  async updateRule(userId: string, id: string, dto: UpdateRuleDto) {
+    const rule = await this.prisma.transactionRule.findFirst({ where: { id, userId } });
+    if (!rule) throw new NotFoundException('Regra não encontrada');
+
+    if (
+      rule.ruleType === 'INSTALLMENT' &&
+      dto.totalInstallments !== undefined &&
+      dto.totalInstallments < (rule.totalInstallments ?? 0)
+    ) {
+      const blocked = await this.prisma.budgetItem.count({
+        where: {
+          ruleId: id,
+          installmentNumber: { gt: dto.totalInstallments },
+          status: { in: ['PAID', 'RECEIVED'] },
+        },
+      });
+      if (blocked > 0) {
+        throw new BadRequestException(
+          `Não é possível reduzir o número de parcelas: ${blocked} parcela(s) já confirmada(s) ficariam fora do novo total.`,
+        );
+      }
+    }
+
+    if (dto.memberId || dto.categoryId) {
+      await this.validateOwnership(
+        userId,
+        dto.memberId ?? rule.memberId,
+        dto.categoryId ?? rule.categoryId,
+      );
+    }
+
+    return this.prisma.transactionRule.update({
+      where: { id },
+      data: {
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.amount !== undefined ? { amount: dto.amount } : {}),
+        ...(dto.memberId !== undefined ? { memberId: dto.memberId } : {}),
+        ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+        ...(dto.expenseType !== undefined ? { expenseType: dto.expenseType } : {}),
+        ...(dto.recurrence !== undefined ? { recurrence: dto.recurrence } : {}),
+        ...(dto.startDate !== undefined ? { startDate: toMidnightUTC(dto.startDate) } : {}),
+        ...(dto.endDate !== undefined ? { endDate: dto.endDate ? toMidnightUTC(dto.endDate) : null } : {}),
+        ...(dto.totalInstallments !== undefined ? { totalInstallments: dto.totalInstallments } : {}),
+        ...(dto.isVariable !== undefined ? { isVariable: dto.isVariable } : {}),
+      },
+      include: { member: true, category: true },
+    });
+  }
+
   async createRule(userId: string, dto: CreateRuleDto) {
     await this.validateOwnership(userId, dto.memberId, dto.categoryId);
     const rule = await this.prisma.transactionRule.create({
@@ -72,8 +123,8 @@ export class TransactionsService {
         userId,
         ruleType: dto.ruleType,
         recurrence: dto.recurrence,
-        startDate: new Date(dto.startDate),
-        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        startDate: toMidnightUTC(dto.startDate),
+        endDate: dto.endDate ? toMidnightUTC(dto.endDate) : null,
         totalInstallments: dto.totalInstallments,
         isVariable: dto.isVariable ?? false,
         expenseType: dto.expenseType ?? null,

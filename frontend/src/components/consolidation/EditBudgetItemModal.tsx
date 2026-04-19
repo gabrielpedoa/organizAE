@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BudgetItem } from '@/lib/types';
 import { UpdateBudgetItemPayload } from '@/hooks/useConsolidation';
+import { dateToUTC } from '@/lib/utils';
 
 interface Props {
   item: BudgetItem | null;
@@ -31,7 +32,7 @@ export function EditBudgetItemModal({ item, onClose, onSave }: Props) {
       await onSave({
         description: description || undefined,
         amount: parseFloat(amount) || undefined,
-        dueDate: dueDate || undefined,
+        dueDate: dueDate ? dateToUTC(dueDate) : undefined,
       });
       onClose();
     } catch {

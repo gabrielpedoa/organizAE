@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -434,6 +435,46 @@ export class ConsolidationService {
     });
   }
 
+  // ── 10. Reset ─────────────────────────────────────────────────────────────
+
+  async resetConsolidation(userId: string, consolidationId: string) {
+    const consolidation = await this.prisma.monthlyConsolidation.findUnique({
+      where: { id: consolidationId },
+    });
+    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+    if (consolidation.userId !== userId) throw new ForbiddenException();
+
+    return this.prisma.$transaction(async (tx) => {
+      const items = await tx.budgetItem.findMany({ where: { consolidationId } });
+
+      const transactionIds = items
+        .map((i) => i.transactionId)
+        .filter((id): id is string => id !== null);
+
+      if (transactionIds.length > 0) {
+        await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } });
+      }
+
+      await tx.budgetItem.deleteMany({ where: { consolidationId, ruleId: null } });
+
+      await tx.budgetItem.updateMany({
+        where: { consolidationId },
+        data: { status: 'PENDING', transactionId: null },
+      });
+
+      return tx.monthlyConsolidation.update({
+        where: { id: consolidationId },
+        data: { status: 'OPEN', closedAt: null },
+        include: {
+          items: {
+            include: { member: true, category: true, transaction: true },
+            orderBy: { dueDate: 'asc' },
+          },
+        },
+      });
+    });
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private async findItemForUser(userId: string, budgetItemId: string) {
@@ -468,7 +509,7 @@ export class ConsolidationService {
     const results: Array<{ date: Date; description: string; installmentNumber?: number }> = [];
 
     if (rule.ruleType === 'INSTALLMENT') {
-      const startMonthAbs = rule.startDate.getFullYear() * 12 + rule.startDate.getMonth();
+      const startMonthAbs = rule.startDate.getUTCFullYear() * 12 + rule.startDate.getUTCMonth();
       const targetMonthAbs = year * 12 + (month - 1);
       const idx = targetMonthAbs - startMonthAbs;
 
@@ -510,7 +551,7 @@ export class ConsolidationService {
 
   private addMonths(date: Date, months: number): Date {
     const d = new Date(date);
-    d.setMonth(d.getMonth() + months);
+    d.setUTCMonth(d.getUTCMonth() + months);
     return d;
   }
 

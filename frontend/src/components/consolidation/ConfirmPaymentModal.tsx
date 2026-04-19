@@ -1,27 +1,37 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { formatCurrency } from '@/lib/utils';
-import { BudgetItem } from '@/lib/types';
-import { ConfirmPaymentPayload, ConfirmReceiptPayload } from '@/hooks/useConsolidation';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { formatCurrency, dateToUTC } from "@/lib/utils";
+import { BudgetItem } from "@/lib/types";
+import {
+  ConfirmPaymentPayload,
+  ConfirmReceiptPayload,
+} from "@/hooks/useConsolidation";
 
 interface Props {
   item: BudgetItem | null;
   onClose: () => void;
-  onConfirm: (payload: ConfirmPaymentPayload | ConfirmReceiptPayload) => Promise<void>;
+  onConfirm: (
+    payload: ConfirmPaymentPayload | ConfirmReceiptPayload,
+  ) => Promise<void>;
 }
 
 function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toISOString().split("T")[0];
 }
 
 export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
-  const isExpense = item?.type === 'EXPENSE';
+  const isExpense = item?.type === "EXPENSE";
   const [date, setDate] = useState(todayISO());
-  const [amount, setAmount] = useState(item ? String(item.amount) : '');
-  const [note, setNote] = useState('');
+  const [amount, setAmount] = useState(item ? String(item.amount) : "");
+  const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!item) return null;
@@ -34,11 +44,13 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
     e.preventDefault();
     setLoading(true);
     try {
+      const isoDate = dateToUTC(date);
       const payload = isExpense
-        ? { paidAt: date, amount: realAmount, note: note || undefined }
-        : { receivedAt: date, amount: realAmount, note: note || undefined };
+        ? { paidAt: isoDate, amount: realAmount, note: note || undefined }
+        : { receivedAt: isoDate, amount: realAmount, note: note || undefined };
       await onConfirm(payload);
       onClose();
+      resetForms();
     } catch {
       // error already toasted by hook
     } finally {
@@ -46,21 +58,36 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
     }
   };
 
+  function resetForms() {
+    setDate(todayISO());
+    setAmount("");
+    setNote("");
+  }
+
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{isExpense ? 'Confirmar Pagamento' : 'Confirmar Recebimento'}</DialogTitle>
+          <DialogTitle>
+            {isExpense ? "Confirmar Pagamento" : "Confirmar Recebimento"}
+          </DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-muted-foreground -mt-2">{item.description}</p>
+        <p className="text-sm text-muted-foreground -mt-2">
+          {item.description}
+        </p>
         <p className="text-xs text-muted-foreground">
-          Previsto: <span className="font-medium text-foreground">{formatCurrency(Number(item.amount))}</span>
+          Previsto:{" "}
+          <span className="font-medium text-foreground">
+            {formatCurrency(Number(item.amount))}
+          </span>
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           <div className="space-y-1">
-            <Label>{isExpense ? 'Data do pagamento' : 'Data do recebimento'}</Label>
+            <Label>
+              {isExpense ? "Data do pagamento" : "Data do recebimento"}
+            </Label>
             <Input
               type="date"
               value={date}
@@ -80,8 +107,11 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
               required
             />
             {hasDiff && (
-              <p className={`text-xs font-medium ${diff < 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                Diferença: {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+              <p
+                className={`text-xs font-medium ${diff < 0 ? "text-amber-600" : "text-green-600"}`}
+              >
+                Diferença: {diff > 0 ? "+" : ""}
+                {formatCurrency(diff)}
               </p>
             )}
           </div>
@@ -96,11 +126,16 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
           </div>
 
           <div className="flex gap-2 pt-1">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={onClose}
+            >
               Cancelar
             </Button>
             <Button type="submit" className="flex-1" disabled={loading}>
-              {loading ? 'Confirmando...' : 'Confirmar'}
+              {loading ? "Confirmando..." : "Confirmar"}
             </Button>
           </div>
         </form>

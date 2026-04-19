@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Member, Category, TransactionRuleFull } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDateOnly, dateToUTC } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,10 @@ import {
   RefreshCw,
   CreditCard,
   Sheet,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EditRuleModal } from "@/components/entries/EditRuleModal";
 
 type DialogMode = "recurring" | "installment";
 type Props = { type: "INCOME" | "EXPENSE" };
@@ -166,8 +168,8 @@ function BulkDialog({
           ruleType: r.mode === "recurring" ? "RECURRING" : "INSTALLMENT",
           recurrence: r.mode === "recurring" ? r.recurrence : undefined,
           isVariable: r.mode === "recurring" ? r.isVariable : false,
-          startDate: r.date,
-          endDate: r.mode === "recurring" && r.endDate ? r.endDate : undefined,
+          startDate: dateToUTC(r.date),
+          endDate: r.mode === "recurring" && r.endDate ? dateToUTC(r.endDate) : undefined,
           totalInstallments:
             r.mode === "installment" ? r.totalInstallments : undefined,
           expenseType: type === "EXPENSE" && r.expenseType ? r.expenseType : undefined,
@@ -375,6 +377,7 @@ export function TransactionsPage({ type }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [filterMember, setFilterMember] = useState("all");
   const [open, setOpen] = useState(false);
+  const [editRule, setEditRule] = useState<TransactionRuleFull | null>(null);
   const [mode, setMode] = useState<DialogMode>("recurring");
 
   const [memberId, setMemberId] = useState("");
@@ -434,8 +437,8 @@ export function TransactionsPage({ type }: Props) {
         ruleType: mode === "recurring" ? "RECURRING" : "INSTALLMENT",
         recurrence: mode === "recurring" ? recurrence : undefined,
         isVariable: mode === "recurring" ? isVariable : false,
-        startDate,
-        endDate: mode === "recurring" && endDate ? endDate : undefined,
+        startDate: dateToUTC(startDate),
+        endDate: mode === "recurring" && endDate ? dateToUTC(endDate) : undefined,
         totalInstallments:
           mode === "installment" ? totalInstallments : undefined,
         expenseType: type === "EXPENSE" && expenseType ? expenseType : undefined,
@@ -737,7 +740,7 @@ export function TransactionsPage({ type }: Props) {
             {displayedRules.map((r) => (
               <tr key={r.id} className="border-t hover:bg-muted/50">
                 <td className="p-3">
-                  {new Date(r.startDate).toLocaleDateString("pt-BR")}
+                  {formatDateOnly(r.startDate)}
                 </td>
                 <td className="p-3">{r.description}</td>
                 <td className="p-3">{r.category.name}</td>
@@ -752,19 +755,36 @@ export function TransactionsPage({ type }: Props) {
                   {formatCurrency(Number(r.amount))}
                 </td>
                 <td className="p-3">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeRule(r.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setEditRule(r)}
+                    >
+                      <Pencil className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeRule(r.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <EditRuleModal
+        rule={editRule}
+        members={members}
+        categories={categories}
+        onClose={() => setEditRule(null)}
+        onSaved={load}
+      />
     </div>
   );
 }

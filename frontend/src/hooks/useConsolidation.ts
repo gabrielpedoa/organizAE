@@ -46,6 +46,7 @@ export function useConsolidation() {
   const [consolidation, setConsolidation] = useState<MonthlyConsolidation | null>(null);
   const [summary, setSummary] = useState<ConsolidationSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSummary = useCallback(async (id: string) => {
@@ -66,8 +67,9 @@ export function useConsolidation() {
           `/consolidations?month=${month}&year=${year}`,
         );
 
-        // If none exists yet, generate one (creates + populates BudgetItems)
-        if (!data) {
+        // Generate (idempotent) for new or open consolidations — ensures rules added
+        // after the initial generation still appear as BudgetItems.
+        if (!data || data.status === 'OPEN') {
           data = await api.post<MonthlyConsolidation>('/consolidations/generate', { month, year });
         }
 
@@ -149,6 +151,19 @@ export function useConsolidation() {
     [consolidation, fetchSummary],
   );
 
+  const resetConsolidation = useCallback(async () => {
+    if (!consolidation) return;
+    setIsResetting(true);
+    try {
+      await api.post(`/consolidations/${consolidation.id}/reset`, {});
+      toast.success('Consolidação resetada com sucesso');
+      await fetchSummary(consolidation.id);
+      setConsolidation((prev) => (prev ? { ...prev, status: 'OPEN', closedAt: null } : null));
+    } finally {
+      setIsResetting(false);
+    }
+  }, [consolidation, fetchSummary]);
+
   /** Navigate to adjacent month, resetting consolidation state. */
   const navigateMonth = useCallback(
     (direction: -1 | 1) => {
@@ -172,6 +187,7 @@ export function useConsolidation() {
     consolidation,
     summary,
     isLoading,
+    isResetting,
     error,
     confirmPayment,
     confirmReceipt,
@@ -179,6 +195,7 @@ export function useConsolidation() {
     updateItem,
     addItem,
     closeConsolidation,
+    resetConsolidation,
     navigateMonth,
   };
 }

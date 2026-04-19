@@ -12,6 +12,7 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { JwtUser } from "../auth/jwt-user.interface";
 import { ConsolidationService } from "./consolidation.service";
+import { toMidnightUTC } from "../common/utils/date.utils";
 import { AddBudgetItemDto } from "./dto/add-budget-item.dto";
 import { CancelBudgetItemDto } from "./dto/cancel-budget-item.dto";
 import { CloseConsolidationDto } from "./dto/close-consolidation.dto";
@@ -75,7 +76,7 @@ export class ConsolidationController {
   ) {
     return this.consolidation.addBudgetItem(user.id, id, {
       ...dto,
-      dueDate: new Date(dto.dueDate),
+      dueDate: toMidnightUTC(dto.dueDate),
     });
   }
 
@@ -91,7 +92,7 @@ export class ConsolidationController {
     const { dueDate, ...rest } = dto;
     return this.consolidation.updateBudgetItem(user.id, itemId, {
       ...rest,
-      ...(dto.dueDate ? { dueDate: new Date(dto.dueDate) } : new Date()),
+      ...(dueDate ? { dueDate: toMidnightUTC(dueDate) } : {}),
     });
   }
 
@@ -103,7 +104,7 @@ export class ConsolidationController {
     @Body() dto: ConfirmPaymentDto,
   ) {
     return this.consolidation.confirmPayment(user.id, itemId, {
-      paidAt: new Date(dto.paidAt),
+      paidAt: toMidnightUTC(dto.paidAt),
       amount: dto.amount,
       note: dto.note,
     });
@@ -117,10 +118,16 @@ export class ConsolidationController {
     @Body() dto: ConfirmReceiptDto,
   ) {
     return this.consolidation.confirmReceipt(user.id, itemId, {
-      receivedAt: new Date(dto.receivedAt),
+      receivedAt: toMidnightUTC(dto.receivedAt),
       amount: dto.amount,
       note: dto.note,
     });
+  }
+
+  /** Resets the consolidation: deletes linked transactions, removes avulso items, reopens period. */
+  @Post(":id/reset")
+  reset(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    return this.consolidation.resetConsolidation(user.id, id);
   }
 
   /** Cancels a BudgetItem. If already confirmed, reverses (deletes) the Transaction. */

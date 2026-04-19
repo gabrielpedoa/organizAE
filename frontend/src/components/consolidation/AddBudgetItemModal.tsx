@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api';
 import { Category, ExpenseType, Member, TransactionType } from '@/lib/types';
 import { AddBudgetItemPayload } from '@/hooks/useConsolidation';
+import { dateToUTC } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface Props {
@@ -84,7 +85,7 @@ export function AddBudgetItemModal({ open, onClose, onAdd }: Props) {
         type,
         description,
         amount: parseFloat(amount),
-        dueDate,
+        dueDate: dateToUTC(dueDate),
         memberId,
         categoryId,
         expenseType: type === 'EXPENSE' && expenseType ? expenseType : undefined,

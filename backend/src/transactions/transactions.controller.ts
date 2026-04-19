@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseArrayPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -16,6 +17,7 @@ import { JwtUser } from "../auth/jwt-user.interface";
 import { TransactionsService } from "./transactions.service";
 import { CreateTransactionDto } from "./dto/create-transaction.dto";
 import { CreateRuleDto } from "./dto/create-rule.dto";
+import { UpdateRuleDto } from "./dto/update-rule.dto";
 
 @Controller("transactions")
 @UseGuards(JwtAuthGuard)
@@ -30,6 +32,15 @@ export class TransactionsController {
   @Post("rules")
   createRule(@CurrentUser() user: JwtUser, @Body() dto: CreateRuleDto) {
     return this.transactions.createRule(user.id, dto);
+  }
+
+  @Patch("rules/:id")
+  updateRule(
+    @CurrentUser() user: JwtUser,
+    @Param("id") id: string,
+    @Body() dto: UpdateRuleDto,
+  ) {
+    return this.transactions.updateRule(user.id, id, dto);
   }
 
   @Delete("rules/:id")
