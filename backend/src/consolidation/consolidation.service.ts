@@ -358,15 +358,16 @@ export class ConsolidationService {
     // ─ By member ─
     const memberMap = new Map<
       string,
-      { member: Item['member']; planned: number; realized: number }
+      { member: Item['member']; planned: number; realized: number; items: Item[] }
     >();
     for (const item of active) {
       if (!memberMap.has(item.memberId)) {
-        memberMap.set(item.memberId, { member: item.member, planned: 0, realized: 0 });
+        memberMap.set(item.memberId, { member: item.member, planned: 0, realized: 0, items: [] });
       }
       const entry = memberMap.get(item.memberId)!;
       entry.planned += Number(item.amount);
       if (item.transaction) entry.realized += Number(item.transaction.amount);
+      entry.items.push(item);
     }
 
     return {
@@ -473,6 +474,156 @@ export class ConsolidationService {
         },
       });
     });
+  }
+
+  // ── New methods for dashboard ─────────────────────────────────────────────
+
+  async getDailyFlow(userId: string, consolidationId: string) {
+    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
+      where: { id: consolidationId, userId },
+      include: {
+        items: {
+          where: { status: { in: [BudgetItemStatus.PAID, BudgetItemStatus.RECEIVED] } },
+          include: { transaction: true },
+        },
+      },
+    });
+    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+
+    const year = consolidation.year;
+    const month = consolidation.month;
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const dailyMap = new Map<number, { income: number; expense: number }>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      dailyMap.set(day, { income: 0, expense: 0 });
+    }
+
+    for (const item of consolidation.items) {
+      if (!item.transaction) continue;
+      const day = item.transaction.date.getUTCDate();
+      const amount = Number(item.transaction.amount);
+      if (item.type === TransactionType.INCOME) {
+        dailyMap.get(day)!.income += amount;
+      } else {
+        dailyMap.get(day)!.expense += amount;
+      }
+    }
+
+    const result = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const { income, expense } = dailyMap.get(day)!;
+      result.push({
+        day,
+        date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        income,
+        expense,
+        balance: income - expense,
+      });
+    }
+    return result;
+  }
+
+  async getCalendarPressure(userId: string, consolidationId: string) {
+    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
+      where: { id: consolidationId, userId },
+      include: {
+        items: {
+          include: { member: true, category: true, transaction: true },
+        },
+      },
+    });
+    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+
+    const year = consolidation.year;
+    const month = consolidation.month;
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const dailyMap = new Map<number, { dailyIncome: number; dailyExpense: number; cumulativeBalance: number; items: any[] }>();
+    let cumulativeBalance = 0;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      dailyMap.set(day, { dailyIncome: 0, dailyExpense: 0, cumulativeBalance: 0, items: [] });
+    }
+
+    // First, process realized transactions
+    for (const item of consolidation.items) {
+      if (item.transaction && (item.status === BudgetItemStatus.PAID || item.status === BudgetItemStatus.RECEIVED)) {
+        const day = item.transaction.date.getUTCDate();
+        const amount = Number(item.transaction.amount);
+        if (item.type === TransactionType.INCOME) {
+          dailyMap.get(day)!.dailyIncome += amount;
+        } else {
+          dailyMap.get(day)!.dailyExpense += amount;
+        }
+        dailyMap.get(day)!.items.push({
+          id: item.id,
+          description: item.description,
+          amount: Number(item.amount),
+          type: item.type,
+          status: item.status,
+          memberName: item.member.name,
+          categoryName: item.category.name,
+        });
+      }
+    }
+
+    // Then, process pending items by dueDate
+    for (const item of consolidation.items) {
+      if (item.status === BudgetItemStatus.PENDING) {
+        const day = item.dueDate.getUTCDate();
+        const amount = Number(item.amount);
+        if (item.type === TransactionType.INCOME) {
+          dailyMap.get(day)!.dailyIncome += amount;
+        } else {
+          dailyMap.get(day)!.dailyExpense += amount;
+        }
+        dailyMap.get(day)!.items.push({
+          id: item.id,
+          description: item.description,
+          amount: Number(item.amount),
+          type: item.type,
+          status: item.status,
+          memberName: item.member.name,
+          categoryName: item.category.name,
+        });
+      }
+    }
+
+    // Calculate cumulative balance and pressure
+    const totalIncomePlanned = consolidation.items
+      .filter(i => i.type === TransactionType.INCOME)
+      .reduce((sum, i) => sum + Number(i.amount), 0);
+
+    const result = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const { dailyIncome, dailyExpense, items } = dailyMap.get(day)!;
+      cumulativeBalance += dailyIncome - dailyExpense;
+      let pressure: 'LOW' | 'MEDIUM' | 'HIGH' | 'POSITIVE';
+      if (cumulativeBalance > 0) {
+        pressure = 'POSITIVE';
+      } else {
+        const threshold10 = totalIncomePlanned * 0.1;
+        const threshold30 = totalIncomePlanned * 0.3;
+        if (cumulativeBalance >= -threshold10) {
+          pressure = 'LOW';
+        } else if (cumulativeBalance >= -threshold30) {
+          pressure = 'MEDIUM';
+        } else {
+          pressure = 'HIGH';
+        }
+      }
+      result.push({
+        day,
+        date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        dailyIncome,
+        dailyExpense,
+        cumulativeBalance,
+        pressure,
+        items,
+      });
+    }
+    return result;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

@@ -49,8 +49,8 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
         ? { paidAt: isoDate, amount: realAmount, note: note || undefined }
         : { receivedAt: isoDate, amount: realAmount, note: note || undefined };
       await onConfirm(payload);
-      onClose();
       resetForms();
+      onClose();
     } catch {
       // error already toasted by hook
     } finally {

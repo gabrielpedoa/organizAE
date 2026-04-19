@@ -57,6 +57,18 @@ export class ConsolidationController {
     return this.consolidation.getConsolidationSummary(user.id, id);
   }
 
+  /** Daily flow: income, expense, balance per day. */
+  @Get(":id/daily-flow")
+  dailyFlow(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    return this.consolidation.getDailyFlow(user.id, id);
+  }
+
+  /** Calendar pressure: cumulative balance and pressure per day. */
+  @Get(":id/calendar-pressure")
+  calendarPressure(@CurrentUser() user: JwtUser, @Param("id") id: string) {
+    return this.consolidation.getCalendarPressure(user.id, id);
+  }
+
   /** Closes the period. Rejects if PENDING items remain unless force=true. */
   @Post(":id/close")
   close(
