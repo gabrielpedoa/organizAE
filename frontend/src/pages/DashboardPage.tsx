@@ -1,14 +1,14 @@
 import { useDashboard } from '@/hooks/useDashboard';
-import { formatCurrency, formatDateOnly } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Wallet } from 'lucide-react';
-import { DailyFlowChart, MemberBreakdown, CategoryBreakdown, BestDatesPanel } from '@/components/dashboard';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { DailyFlowChart, MemberBreakdown, CategoryBreakdown } from '@/components/dashboard';
 import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
-  const { selectedMonth, selectedYear, setMonth, setYear, consolidation, summary, dailyFlow, bestDates, isLoading, error } = useDashboard();
+  const { selectedMonth, selectedYear, setMonth, setYear, consolidation, summary, dailyFlow, isLoading, error } = useDashboard();
 
   const navigateMonth = (delta: number) => {
     let newMonth = selectedMonth + delta;
@@ -197,9 +197,6 @@ export function DashboardPage() {
         {summary.byMember && <MemberBreakdown members={summary.byMember} month={selectedMonth} year={selectedYear} />}
         {summary.byCategory && <CategoryBreakdown categories={summary.byCategory} month={selectedMonth} year={selectedYear} />}
       </div>
-
-      {/* Melhores datas */}
-      {bestDates && <BestDatesPanel data={bestDates} />}
     </div>
   );
 }

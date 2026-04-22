@@ -1,25 +1,10 @@
 import { useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatCurrency, formatDateOnly } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { Clock, CheckCircle, X } from 'lucide-react';
-
-interface BudgetItem {
-  id: string;
-  description: string;
-  amount: number;
-  dueDate: string;
-  status: string;
-  type: string;
-  installmentNumber?: number;
-  totalInstallments?: number;
-  ruleId?: string;
-  member: { id: string; name: string };
-  category: { id: string; name: string; type: string };
-  transaction?: { id: string; amount: number; date: string; note?: string };
-}
+import { Clock, CheckCircle, X, ChevronRight } from 'lucide-react';
+import { BudgetItem } from '@/lib/types';
 
 interface CategoryData {
   category: { id: string; name: string; type: string };
@@ -42,20 +27,6 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
   const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
   const expenseCategories = categories.filter(c => c.category.type === 'EXPENSE');
-  const totalExpense = expenseCategories.reduce((sum, c) => sum + c.realized, 0);
-
-  // Generate colors for pie chart
-  const colors = expenseCategories.map((_, index) => {
-    const hue = (index * 137.5) % 360; // Golden angle approximation for distinct colors
-    return `hsl(${hue}, 70%, 50%)`;
-  });
-
-  const pieData = expenseCategories.map((cat, index) => ({
-    name: cat.category.name,
-    value: cat.realized,
-    color: colors[index],
-    percentage: totalExpense > 0 ? (cat.realized / totalExpense) * 100 : 0,
-  }));
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -69,8 +40,8 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
 
   const getItemBadge = (item: BudgetItem) => {
     if (item.ruleId) {
-      if (item.totalInstallments && item.totalInstallments > 1) {
-        return <Badge variant="outline">Parcelado ({item.installmentNumber}/{item.totalInstallments})</Badge>;
+      if (item.installmentNumber && item.installmentNumber > 1) {
+        return <Badge variant="outline">Parcelado</Badge>;
       }
       return <Badge variant="outline">Recorrente</Badge>;
     }
@@ -84,19 +55,17 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
     return `vence ${formatDateOnly(date)}`;
   };
 
-  const handlePieClick = (data: any) => {
-    if (data && data.name) {
-      const category = expenseCategories.find(c => c.category.name === data.name);
-      if (category) {
-        setSelectedCategory(category);
-        setDrawerOpen(true);
-      }
-    }
-  };
-
   const handleListClick = (category: CategoryData) => {
     setSelectedCategory(category);
     setDrawerOpen(true);
+  };
+
+  const rankedCategories = [...expenseCategories].sort((a, b) => b.realized - a.realized);
+  const maxRealized = Math.max(...rankedCategories.map(c => c.realized));
+
+  const getColorByIndex = (index: number) => {
+    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0'];
+    return colors[index % colors.length];
   };
 
   return (
@@ -106,58 +75,31 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
           <CardTitle className="text-base">Gastos por Categoria</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Pie Chart */}
-            <div>
-              <div className="h-52 md:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      onClick={handlePieClick}
-                      cursor="pointer"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
-                      labelFormatter={(label) => label}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* List */}
-            <div className="space-y-3">
-              {expenseCategories.map((cat, index) => (
+          <div className="space-y-4">
+            {rankedCategories.map((cat, index) => {
+              const percentage = maxRealized > 0 ? (cat.realized / maxRealized) * 100 : 0;
+              return (
                 <div
                   key={cat.category.id}
-                  className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-gray-50"
+                  className="cursor-pointer hover:bg-gray-50 p-2 rounded"
                   onClick={() => handleListClick(cat)}
                 >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: colors[index] }}
-                    ></div>
-                    <span className="text-sm">{cat.category.name}</span>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium">{cat.category.name}</span>
+                    <span className="text-sm">{formatCurrency(cat.realized)}</span>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium">{formatCurrency(cat.realized)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {totalExpense > 0 ? ((cat.realized / totalExpense) * 100).toFixed(1) : 0}%
-                    </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: `${percentage}%`,
+                        backgroundColor: getColorByIndex(index),
+                      }}
+                    ></div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

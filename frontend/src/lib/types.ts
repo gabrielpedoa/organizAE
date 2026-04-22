@@ -133,3 +133,15 @@ export interface ConsolidationSummary {
     cancelled: BudgetItem[];
   };
 }
+
+export interface DailyFlow {
+  day: number;
+  date: string;
+  income: number;
+  expense: number;
+  balance: number;
+}
+
+export type Consolidation = MonthlyConsolidation | null;
+export type Summary = ConsolidationSummary;
+export type DailyFlowData = DailyFlow[];
