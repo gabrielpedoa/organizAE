@@ -1,4 +1,5 @@
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 import { formatCurrency, formatDateOnly } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,6 +57,8 @@ export function BestDatesPanel({ data }: Props) {
 
   const separatorX = secondMonthStart?.label;
 
+  const isMobile = useIsMobile();
+
   const topDays = chartData
     .filter((item) => item.rank === 'ÓTIMO' || item.rank === 'BOM')
     .sort((a, b) => b.cumulativeBalance - a.cumulativeBalance)
@@ -105,11 +108,16 @@ export function BestDatesPanel({ data }: Props) {
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
-          <div className="h-96">
+          <div className={isMobile ? 'h-52' : 'h-96'}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: isMobile ? 10 : 12, angle: isMobile ? -45 : 0, textAnchor: isMobile ? 'end' : 'middle' }}
+                  interval={0}
+                  tickFormatter={(label) => (isMobile ? String(label).split('/')[0] : label)}
+                />
                 <YAxis tickFormatter={(value) => formatCurrency(value)} />
                 <Tooltip content={<CustomTooltip />} />
                 <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />

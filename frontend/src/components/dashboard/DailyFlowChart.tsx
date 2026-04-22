@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 import { formatCurrency, formatDateOnly } from '@/lib/utils';
 
 interface DailyFlow {
@@ -38,14 +39,19 @@ export function DailyFlowChart({ data, month, year }: Props) {
     return null;
   };
 
+  const isMobile = useIsMobile();
+  const ticks = isMobile
+    ? chartData.filter((item, index) => item.day === 1 || item.day % 5 === 0 || index === chartData.length - 1).map((item) => item.day)
+    : undefined;
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Fluxo Diário — {capitalizedMonth} {year}</h3>
-      <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+      <div className="w-full">
+        <ResponsiveContainer width="100%" height={isMobile ? 220 : 300}>
+          <BarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="day" />
+            <XAxis dataKey="day" ticks={ticks} tick={{ fontSize: isMobile ? 10 : 12 }} />
             <YAxis tickFormatter={(value) => formatCurrency(value)} />
             <Tooltip content={<CustomTooltip />} />
             <Legend />

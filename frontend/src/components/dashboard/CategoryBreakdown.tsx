@@ -109,7 +109,7 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Pie Chart */}
             <div>
-              <div className="h-64">
+              <div className="h-52 md:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie

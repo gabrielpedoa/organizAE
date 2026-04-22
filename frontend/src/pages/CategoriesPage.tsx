@@ -68,8 +68,8 @@ export function CategoriesPage() {
         </Dialog>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full min-w-[480px] text-sm">
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-3 font-medium">Nome</th>

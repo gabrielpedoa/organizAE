@@ -67,8 +67,8 @@ function ItemTable({ items, title }: { items: BudgetItem[]; title: string }) {
   return (
     <div>
       <h3 className="text-sm font-semibold mb-2">{title}</h3>
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-2 font-medium">Descrição</th>
