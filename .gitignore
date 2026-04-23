@@ -4,6 +4,6 @@ dist/
 *.env.local
 .claude
 claude.md
-backend_rules.md
-frontend_rules.md
+BACKEND_RULES.md
+FRONTEND_RULES.md
 docker-compose.yml

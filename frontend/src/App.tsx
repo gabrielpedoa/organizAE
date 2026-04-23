@@ -9,6 +9,7 @@ import { CategoriesPage } from '@/pages/CategoriesPage';
 import { MembersPage } from '@/pages/MembersPage';
 import { ConsolidationPage } from '@/pages/ConsolidationPage';
 import { ConsolidationReportPage } from '@/pages/ConsolidationReportPage';
+import { AccountsPage } from '@/pages/AccountsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { useAuth } from './context/AuthContext';
 
@@ -31,6 +32,7 @@ export function App() {
         <Route path="/transactions/expense" element={<PrivateRoute><TransactionsPage type="EXPENSE" /></PrivateRoute>} />
         <Route path="/categories" element={<PrivateRoute><CategoriesPage /></PrivateRoute>} />
         <Route path="/members" element={<PrivateRoute><MembersPage /></PrivateRoute>} />
+        <Route path="/accounts" element={<PrivateRoute><AccountsPage /></PrivateRoute>} />
         <Route path="/consolidation" element={<PrivateRoute><ConsolidationPage /></PrivateRoute>} />
         <Route path="/consolidation/:id" element={<PrivateRoute><ConsolidationReportPage /></PrivateRoute>} />
         <Route path="*" element={<NotFoundPage />} />

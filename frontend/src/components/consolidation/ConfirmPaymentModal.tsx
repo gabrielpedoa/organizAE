@@ -14,6 +14,8 @@ import {
   ConfirmPaymentPayload,
   ConfirmReceiptPayload,
 } from "@/hooks/useConsolidation";
+import { useAccounts } from "@/hooks/useAccounts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Props {
   item: BudgetItem | null;
@@ -29,6 +31,8 @@ function todayISO() {
 
 export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
   const isExpense = item?.type === "EXPENSE";
+  const { accounts } = useAccounts();
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState(item ? String(item.amount) : "");
   const [note, setNote] = useState("");
@@ -46,8 +50,8 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
     try {
       const isoDate = dateToUTC(date);
       const payload = isExpense
-        ? { paidAt: isoDate, amount: realAmount, note: note || undefined }
-        : { receivedAt: isoDate, amount: realAmount, note: note || undefined };
+        ? { paidAt: isoDate, amount: realAmount, note: note || undefined, accountId: selectedAccountId || undefined }
+        : { receivedAt: isoDate, amount: realAmount, note: note || undefined, accountId: selectedAccountId || undefined };
       await onConfirm(payload);
       resetForms();
       onClose();
@@ -62,6 +66,7 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
     setDate(todayISO());
     setAmount("");
     setNote("");
+    setSelectedAccountId("");
   }
 
   return (
@@ -123,6 +128,37 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Conta <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar conta..." />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    <span className="flex items-center justify-between w-full gap-4">
+                      <span>{account.name}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {formatCurrency(Number(account.balance))}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedAccountId && (() => {
+              const acc = accounts.find(a => a.id === selectedAccountId);
+              return acc ? (
+                <p className="text-xs text-muted-foreground">
+                  Saldo disponível: <span className={Number(acc.balance) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                    {formatCurrency(Number(acc.balance))}
+                  </span>
+                </p>
+              ) : null;
+            })()}
           </div>
 
           <div className="flex gap-2 pt-1">

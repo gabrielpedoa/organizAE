@@ -145,3 +145,53 @@ export interface DailyFlow {
 export type Consolidation = MonthlyConsolidation | null;
 export type Summary = ConsolidationSummary;
 export type DailyFlowData = DailyFlow[];
+
+// ─── Account types ────────────────────────────────────────────────────────────
+
+export type AccountType = 'CHECKING' | 'SAVINGS' | 'BUSINESS' | 'INVESTMENT' | 'OTHER';
+export type InvestmentProductType = 'SAVINGS_BOX' | 'FIXED_INCOME' | 'STOCK' | 'FUND' | 'OTHER';
+export type AccountEntryType = 'INCOME' | 'EXPENSE' | 'TRANSFER_IN' | 'TRANSFER_OUT';
+
+export interface AccountMemberRelation {
+  accountId: string;
+  memberId: string;
+  member: Pick<Member, 'id' | 'name'>;
+}
+
+export interface InvestmentPosition {
+  id: string;
+  accountId: string;
+  name: string;
+  productType: InvestmentProductType;
+  amount: number;
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccountEntry {
+  id: string;
+  accountId: string;
+  type: AccountEntryType;
+  amount: number;
+  description: string;
+  date: string;
+  budgetItemId?: string | null;
+  transactionId?: string | null;
+  transferPairId?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  institution: string;
+  userId: string;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
+  members: AccountMemberRelation[];
+  investments: InvestmentPosition[];
+}
