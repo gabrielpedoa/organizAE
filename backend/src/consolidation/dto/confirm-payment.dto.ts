@@ -1,4 +1,5 @@
-import { IsDateString, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class ConfirmPaymentDto {
   @IsDateString()
@@ -11,4 +12,9 @@ export class ConfirmPaymentDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ description: 'ID da conta debitada', example: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
 }

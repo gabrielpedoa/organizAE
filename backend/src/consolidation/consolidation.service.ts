@@ -6,12 +6,15 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import {
+  AccountEntryType,
   BudgetItemStatus,
   Prisma,
   TransactionRule,
   TransactionType,
 } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/library";
 import { ConsolidationRepository } from "./consolidation.repository";
+import { AccountsService } from "../accounts/accounts.service";
 
 // ─── DTOs (inline, mirrored in dto/ files for the controller) ─────────────────
 
@@ -19,12 +22,14 @@ export interface ConfirmPaymentData {
   paidAt: Date;
   amount: number;
   note?: string;
+  accountId?: string;
 }
 
 export interface ConfirmReceiptData {
   receivedAt: Date;
   amount: number;
   note?: string;
+  accountId?: string;
 }
 
 export interface AddBudgetItemData {
@@ -54,6 +59,7 @@ export class ConsolidationService {
 
   constructor(
     private readonly consolidationRepository: ConsolidationRepository,
+    private readonly accountsService: AccountsService,
   ) {}
 
   // ── 1. Generate ────────────────────────────────────────────────────────────
@@ -166,10 +172,28 @@ export class ConsolidationService {
       note: data.note ?? item.note ?? undefined,
     };
 
-    return this.consolidationRepository.confirmPayment(
+    const result = await this.consolidationRepository.confirmPayment(
       budgetItemId,
       transactionData,
     );
+
+    if (data.accountId) {
+      try {
+        await this.accountsService.recordEntry(data.accountId, userId, {
+          type: AccountEntryType.EXPENSE,
+          amount: new Decimal(data.amount),
+          description: item.description,
+          date: data.paidAt,
+          budgetItemId: item.id,
+          transactionId: result.transactionId ?? undefined,
+          note: data.note,
+        });
+      } catch (error) {
+        this.logger.warn(`Conta não encontrada ou sem permissão para registrar entrada: ${data.accountId}`);
+      }
+    }
+
+    return result;
   }
 
   // ── 3. Confirm receipt (INCOME → RECEIVED) ────────────────────────────────
@@ -205,10 +229,28 @@ export class ConsolidationService {
       note: data.note ?? item.note ?? undefined,
     };
 
-    return this.consolidationRepository.confirmReceipt(
+    const result = await this.consolidationRepository.confirmReceipt(
       budgetItemId,
       transactionData,
     );
+
+    if (data.accountId) {
+      try {
+        await this.accountsService.recordEntry(data.accountId, userId, {
+          type: AccountEntryType.INCOME,
+          amount: new Decimal(data.amount),
+          description: item.description,
+          date: data.receivedAt,
+          budgetItemId: item.id,
+          transactionId: result.transactionId ?? undefined,
+          note: data.note,
+        });
+      } catch (error) {
+        this.logger.warn(`Conta não encontrada ou sem permissão para registrar entrada: ${data.accountId}`);
+      }
+    }
+
+    return result;
   }
 
   // ── 4. Cancel ─────────────────────────────────────────────────────────────
@@ -233,11 +275,19 @@ export class ConsolidationService {
       throw new BadRequestException("Item já está cancelado");
     }
 
-    return this.consolidationRepository.cancelBudgetItem(
+    const result = await this.consolidationRepository.cancelBudgetItem(
       budgetItemId,
       reason ?? item.note ?? undefined,
       item.transactionId,
     );
+
+    try {
+      await this.accountsService.reverseEntry(budgetItemId);
+    } catch (error) {
+      this.logger.warn(`Nenhuma entrada de conta encontrada para reverter: ${budgetItemId}`);
+    }
+
+    return result;
   }
 
   // ── 5. Update (PENDING only) ───────────────────────────────────────────────

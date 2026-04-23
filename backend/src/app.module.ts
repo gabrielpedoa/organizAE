@@ -7,6 +7,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { SummaryModule } from './summary/summary.module';
 import { ConsolidationModule } from './consolidation/consolidation.module';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ConsolidationModule } from './consolidation/consolidation.module';
     TransactionsModule,
     SummaryModule,
     ConsolidationModule,
+    AccountsModule,
   ],
 })
 export class AppModule {}

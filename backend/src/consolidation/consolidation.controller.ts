@@ -136,6 +136,7 @@ export class ConsolidationController {
       paidAt: toMidnightUTC(dto.paidAt),
       amount: dto.amount,
       note: dto.note,
+      accountId: dto.accountId,
     });
   }
 
@@ -153,6 +154,7 @@ export class ConsolidationController {
       receivedAt: toMidnightUTC(dto.receivedAt),
       amount: dto.amount,
       note: dto.note,
+      accountId: dto.accountId,
     });
   }
 

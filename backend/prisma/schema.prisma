@@ -17,6 +17,7 @@ model User {
   categories     Category[]
   rules          TransactionRule[]
   consolidations MonthlyConsolidation[]
+  accounts       Account[]
 }
 
 model Member {
@@ -27,6 +28,7 @@ model Member {
   transactions Transaction[]
   rules        TransactionRule[]
   budgetItems  BudgetItem[]
+  accountMembers AccountMember[]
   createdAt    DateTime          @default(now())
 }
 
@@ -86,6 +88,7 @@ model Transaction {
   consolidation     MonthlyConsolidation? @relation(fields: [consolidationId], references: [id])
   /// Reverse side of BudgetItem.transaction (one-to-one)
   budgetItem        BudgetItem?
+  accountEntry      AccountEntry?
   createdAt         DateTime              @default(now())
 
   @@index([consolidationId])
@@ -142,6 +145,7 @@ model BudgetItem {
   category          Category             @relation(fields: [categoryId], references: [id])
   /// onDelete: SetNull — if the Transaction is deleted (reversal), clear the reference automatically
   transaction       Transaction?         @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  accountEntry      AccountEntry?
 
   /// Prevents duplicate auto-generation: one BudgetItem per rule per consolidation.
   /// In PostgreSQL NULL != NULL, so multiple avulso items (ruleId = null) are still allowed.
@@ -193,4 +197,92 @@ enum ExpenseType {
   VARIABLE
   INVESTMENT
   TRANSFER
+}
+
+// ─── Financial Accounts models ───────────────────────────────────────────────
+
+model Account {
+  id          String      @id @default(uuid())
+  name        String
+  type        AccountType
+  institution String
+  userId      String
+  balance     Decimal     @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members     AccountMember[]
+  investments InvestmentPosition[]
+  entries     AccountEntry[]
+
+  @@index([userId])
+}
+
+model AccountMember {
+  accountId String
+  memberId  String
+
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  member    Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, memberId])
+}
+
+model InvestmentPosition {
+  id          String               @id @default(uuid())
+  accountId   String
+  name        String
+  productType InvestmentProductType
+  amount      Decimal
+  note        String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model AccountEntry {
+  id             String           @id @default(uuid())
+  accountId      String
+  type           AccountEntryType
+  amount         Decimal
+  description    String
+  date           DateTime
+  budgetItemId   String?          @unique
+  transactionId  String?          @unique
+  transferPairId String?
+  note           String?
+  createdAt      DateTime         @default(now())
+
+  account        Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  budgetItem     BudgetItem?      @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  transaction    Transaction?     @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([transferPairId])
+  @@index([budgetItemId])
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  BUSINESS
+  INVESTMENT
+  OTHER
+}
+
+enum InvestmentProductType {
+  SAVINGS_BOX
+  FIXED_INCOME
+  STOCK
+  FUND
+  OTHER
+}
+
+enum AccountEntryType {
+  INCOME
+  EXPENSE
+  TRANSFER_IN
+  TRANSFER_OUT
 }
