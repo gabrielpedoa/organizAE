@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -10,7 +11,7 @@ import {
   TransactionRule,
   TransactionType,
 } from "@prisma/client";
-import { PrismaService } from "../prisma/prisma.service";
+import { ConsolidationRepository } from "./consolidation.repository";
 
 // ─── DTOs (inline, mirrored in dto/ files for the controller) ─────────────────
 
@@ -49,7 +50,11 @@ export interface UpdateBudgetItemData {
 
 @Injectable()
 export class ConsolidationService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ConsolidationService.name);
+
+  constructor(
+    private readonly consolidationRepository: ConsolidationRepository,
+  ) {}
 
   // ── 1. Generate ────────────────────────────────────────────────────────────
 
@@ -63,11 +68,15 @@ export class ConsolidationService {
     month: number,
     year: number,
   ) {
-    const consolidation = await this.prisma.monthlyConsolidation.upsert({
-      where: { userId_month_year: { userId, month, year } },
-      create: { userId, month, year },
-      update: {},
-    });
+    this.logger.debug(
+      `Generating consolidation for user=${userId}, month=${month}, year=${year}`,
+    );
+
+    const consolidation = await this.consolidationRepository.upsertConsolidation(
+      userId,
+      month,
+      year,
+    );
 
     if (consolidation.status === "CLOSED") {
       throw new BadRequestException("Consolidação já está fechada");
@@ -76,16 +85,13 @@ export class ConsolidationService {
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd = new Date(year, month, 0); // last day of month
 
-    const rules = await this.prisma.transactionRule.findMany({
-      where: { userId },
-    });
+    const rules = await this.consolidationRepository.findActiveRules(userId);
 
     // Rules that already have a BudgetItem in this period — skip them
-    const existing = await this.prisma.budgetItem.findMany({
-      where: { consolidationId: consolidation.id, ruleId: { not: null } },
-      select: { ruleId: true },
-    });
-    const existingRuleIds = new Set(existing.map((i) => i.ruleId));
+    const existingRuleIds =
+      await this.consolidationRepository.findExistingBudgetItemRuleIds(
+        consolidation.id,
+      );
 
     const toCreate: Prisma.BudgetItemCreateManyInput[] = [];
 
@@ -118,21 +124,12 @@ export class ConsolidationService {
 
     if (toCreate.length > 0) {
       // skipDuplicates handles race conditions and the WEEKLY multi-occurrence edge case
-      await this.prisma.budgetItem.createMany({
-        data: toCreate,
-        skipDuplicates: true,
-      });
+      await this.consolidationRepository.createManyBudgetItems(toCreate);
     }
 
-    return this.prisma.monthlyConsolidation.findUnique({
-      where: { id: consolidation.id },
-      include: {
-        items: {
-          include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: "asc" },
-        },
-      },
-    });
+    return this.consolidationRepository.findConsolidationWithItems(
+      consolidation.id,
+    );
   }
 
   // ── 2. Confirm payment (EXPENSE → PAID) ───────────────────────────────────
@@ -142,7 +139,11 @@ export class ConsolidationService {
     budgetItemId: string,
     data: ConfirmPaymentData,
   ) {
-    const item = await this.findItemForUser(userId, budgetItemId);
+    const item = await this.consolidationRepository.findBudgetItemForUser(
+      budgetItemId,
+      userId,
+    );
+    if (!item) throw new NotFoundException("Item não encontrado");
 
     if (item.status !== "PENDING") {
       throw new BadRequestException("Item não está pendente");
@@ -151,33 +152,24 @@ export class ConsolidationService {
       throw new BadRequestException("Use confirmReceipt para receitas");
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const transaction = await tx.transaction.create({
-        data: {
-          amount: data.amount,
-          description: item.description,
-          date: data.paidAt,
-          type: TransactionType.EXPENSE,
-          memberId: item.memberId,
-          categoryId: item.categoryId,
-          ruleId: item.ruleId,
-          installmentNumber: item.installmentNumber,
-          consolidationId: item.consolidationId,
-          expenseType: item.expenseType ?? null,
-          note: data.note,
-        },
-      });
+    const transactionData: Prisma.TransactionCreateInput = {
+      amount: data.amount,
+      description: item.description,
+      date: data.paidAt,
+      type: TransactionType.EXPENSE,
+      member: { connect: { id: item.memberId } },
+      category: { connect: { id: item.categoryId } },
+      rule: item.ruleId ? { connect: { id: item.ruleId } } : undefined,
+      consolidation: { connect: { id: item.consolidationId } },
+      installmentNumber: item.installmentNumber,
+      expenseType: item.expenseType ?? null,
+      note: data.note ?? item.note ?? undefined,
+    };
 
-      return tx.budgetItem.update({
-        where: { id: budgetItemId },
-        data: {
-          status: BudgetItemStatus.PAID,
-          transactionId: transaction.id,
-          note: data.note ?? item.note,
-        },
-        include: { member: true, category: true, transaction: true },
-      });
-    });
+    return this.consolidationRepository.confirmPayment(
+      budgetItemId,
+      transactionData,
+    );
   }
 
   // ── 3. Confirm receipt (INCOME → RECEIVED) ────────────────────────────────
@@ -187,7 +179,11 @@ export class ConsolidationService {
     budgetItemId: string,
     data: ConfirmReceiptData,
   ) {
-    const item = await this.findItemForUser(userId, budgetItemId);
+    const item = await this.consolidationRepository.findBudgetItemForUser(
+      budgetItemId,
+      userId,
+    );
+    if (!item) throw new NotFoundException("Item não encontrado");
 
     if (item.status !== "PENDING") {
       throw new BadRequestException("Item não está pendente");
@@ -196,32 +192,23 @@ export class ConsolidationService {
       throw new BadRequestException("Use confirmPayment para despesas");
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const transaction = await tx.transaction.create({
-        data: {
-          amount: data.amount,
-          description: item.description,
-          date: data.receivedAt,
-          type: TransactionType.INCOME,
-          memberId: item.memberId,
-          categoryId: item.categoryId,
-          ruleId: item.ruleId,
-          installmentNumber: item.installmentNumber,
-          consolidationId: item.consolidationId,
-          note: data.note,
-        },
-      });
+    const transactionData: Prisma.TransactionCreateInput = {
+      amount: data.amount,
+      description: item.description,
+      date: data.receivedAt,
+      type: TransactionType.INCOME,
+      member: { connect: { id: item.memberId } },
+      category: { connect: { id: item.categoryId } },
+      rule: item.ruleId ? { connect: { id: item.ruleId } } : undefined,
+      consolidation: { connect: { id: item.consolidationId } },
+      installmentNumber: item.installmentNumber,
+      note: data.note ?? item.note ?? undefined,
+    };
 
-      return tx.budgetItem.update({
-        where: { id: budgetItemId },
-        data: {
-          status: BudgetItemStatus.RECEIVED,
-          transactionId: transaction.id,
-          note: data.note ?? item.note,
-        },
-        include: { member: true, category: true, transaction: true },
-      });
-    });
+    return this.consolidationRepository.confirmReceipt(
+      budgetItemId,
+      transactionData,
+    );
   }
 
   // ── 4. Cancel ─────────────────────────────────────────────────────────────
@@ -236,27 +223,21 @@ export class ConsolidationService {
     budgetItemId: string,
     reason?: string,
   ) {
-    const item = await this.findItemForUser(userId, budgetItemId);
+    const item = await this.consolidationRepository.findBudgetItemForUser(
+      budgetItemId,
+      userId,
+    );
+    if (!item) throw new NotFoundException("Item não encontrado");
 
     if (item.status === BudgetItemStatus.CANCELLED) {
       throw new BadRequestException("Item já está cancelado");
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      if (item.transactionId) {
-        // Deleting the Transaction triggers ON DELETE SET NULL on BudgetItem.transactionId
-        await tx.transaction.delete({ where: { id: item.transactionId } });
-      }
-
-      return tx.budgetItem.update({
-        where: { id: budgetItemId },
-        data: {
-          status: BudgetItemStatus.CANCELLED,
-          note: reason ?? item.note,
-        },
-        include: { member: true, category: true },
-      });
-    });
+    return this.consolidationRepository.cancelBudgetItem(
+      budgetItemId,
+      reason ?? item.note ?? undefined,
+      item.transactionId,
+    );
   }
 
   // ── 5. Update (PENDING only) ───────────────────────────────────────────────
@@ -269,7 +250,11 @@ export class ConsolidationService {
     budgetItemId: string,
     data: UpdateBudgetItemData,
   ) {
-    const item = await this.findItemForUser(userId, budgetItemId);
+    const item = await this.consolidationRepository.findBudgetItemForUser(
+      budgetItemId,
+      userId,
+    );
+    if (!item) throw new NotFoundException("Item não encontrado");
 
     if (item.status !== BudgetItemStatus.PENDING) {
       throw new BadRequestException(
@@ -277,17 +262,11 @@ export class ConsolidationService {
       );
     }
 
-    return this.prisma.budgetItem.update({
-      where: { id: budgetItemId },
-      data: {
-        ...(data.amount !== undefined ? { amount: data.amount } : {}),
-        ...(data.description !== undefined
-          ? { description: data.description }
-          : {}),
-        ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
-        ...(data.note !== undefined ? { note: data.note } : {}),
-      },
-      include: { member: true, category: true, transaction: true },
+    return this.consolidationRepository.updateBudgetItem(budgetItemId, {
+      ...(data.amount !== undefined ? { amount: data.amount } : {}),
+      ...(data.description !== undefined ? { description: data.description } : {}),
+      ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
+      ...(data.note !== undefined ? { note: data.note } : {}),
     });
   }
 
@@ -299,9 +278,11 @@ export class ConsolidationService {
     consolidationId: string,
     data: AddBudgetItemData,
   ) {
-    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
-      where: { id: consolidationId, userId },
-    });
+    const consolidation =
+      await this.consolidationRepository.findConsolidationForUser(
+        consolidationId,
+        userId,
+      );
     if (!consolidation)
       throw new NotFoundException("Consolidação não encontrada");
     if (consolidation.status === "CLOSED") {
@@ -311,29 +292,24 @@ export class ConsolidationService {
     }
 
     const [member, category] = await Promise.all([
-      this.prisma.member.findFirst({ where: { id: data.memberId, userId } }),
-      this.prisma.category.findFirst({
-        where: { id: data.categoryId, userId },
-      }),
+      this.consolidationRepository.findMemberForUser(data.memberId, userId),
+      this.consolidationRepository.findCategoryForUser(data.categoryId, userId),
     ]);
     if (!member || !category)
       throw new NotFoundException("Membro ou categoria não encontrado");
 
-    return this.prisma.budgetItem.create({
-      data: {
-        consolidationId,
-        memberId: data.memberId,
-        categoryId: data.categoryId,
-        type: data.type,
-        amount: data.amount,
-        description: data.description,
-        dueDate: new Date(data.dueDate),
-        installmentNumber: data.installmentNumber,
-        expenseType: data.expenseType ?? null,
-        note: data.note,
-        // ruleId intentionally omitted — this is an avulso item
-      },
-      include: { member: true, category: true },
+    return this.consolidationRepository.createBudgetItem({
+      consolidation: { connect: { id: consolidationId } },
+      member: { connect: { id: data.memberId } },
+      category: { connect: { id: data.categoryId } },
+      type: data.type,
+      amount: data.amount,
+      description: data.description,
+      dueDate: new Date(data.dueDate),
+      installmentNumber: data.installmentNumber,
+      expenseType: data.expenseType ?? null,
+      note: data.note,
+      // ruleId intentionally omitted — this is an avulso item
     });
   }
 
@@ -344,15 +320,11 @@ export class ConsolidationService {
    * income/expense, category, and member.
    */
   async getConsolidationSummary(userId: string, consolidationId: string) {
-    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
-      where: { id: consolidationId, userId },
-      include: {
-        items: {
-          include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: "asc" },
-        },
-      },
-    });
+    const consolidation =
+      await this.consolidationRepository.findConsolidationForUserWithItems(
+        consolidationId,
+        userId,
+      );
     if (!consolidation)
       throw new NotFoundException("Consolidação não encontrada");
 
@@ -366,14 +338,13 @@ export class ConsolidationService {
       (i) => i.type === TransactionType.EXPENSE,
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sum = (items: Item[], getValue: (i: Item) => any): number =>
+    const sum = (items: Item[], getValue: (i: Item) => unknown): number =>
       items.reduce((s, i) => s + Number(getValue(i) ?? 0), 0);
 
     const incomePlanned = sum(incomeItems, (i) => i.amount);
     const incomeRealized = sum(
       incomeItems.filter((i) => i.transaction),
-      (i) => i.transaction!.amount,
+      (i) => i.transaction?.amount,
     );
     const incomePending = sum(
       incomeItems.filter((i) => i.status === BudgetItemStatus.PENDING),
@@ -383,7 +354,7 @@ export class ConsolidationService {
     const expensePlanned = sum(expenseItems, (i) => i.amount);
     const expenseRealized = sum(
       expenseItems.filter((i) => i.transaction),
-      (i) => i.transaction!.amount,
+      (i) => i.transaction?.amount,
     );
     const expensePending = sum(
       expenseItems.filter((i) => i.status === BudgetItemStatus.PENDING),
@@ -481,15 +452,11 @@ export class ConsolidationService {
   // ── 8. Find by month/year (returns null if not found) ────────────────────
 
   async findByMonthYear(userId: string, month: number, year: number) {
-    return this.prisma.monthlyConsolidation.findUnique({
-      where: { userId_month_year: { userId, month, year } },
-      include: {
-        items: {
-          include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: "asc" },
-        },
-      },
-    });
+    return this.consolidationRepository.findConsolidationByMonthYear(
+      userId,
+      month,
+      year,
+    );
   }
 
   // ── 9. Close ──────────────────────────────────────────────────────────────
@@ -503,15 +470,11 @@ export class ConsolidationService {
     consolidationId: string,
     force = false,
   ) {
-    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
-      where: { id: consolidationId, userId },
-      include: {
-        items: {
-          where: { status: BudgetItemStatus.PENDING },
-          select: { id: true },
-        },
-      },
-    });
+    const consolidation =
+      await this.consolidationRepository.findConsolidationForUserWithPendingItems(
+        consolidationId,
+        userId,
+      );
     if (!consolidation)
       throw new NotFoundException("Consolidação não encontrada");
     if (consolidation.status === "CLOSED") {
@@ -524,73 +487,32 @@ export class ConsolidationService {
       );
     }
 
-    return this.prisma.monthlyConsolidation.update({
-      where: { id: consolidationId },
-      data: { status: "CLOSED", closedAt: new Date() },
+    return this.consolidationRepository.updateConsolidation(consolidationId, {
+      status: "CLOSED",
+      closedAt: new Date(),
     });
   }
 
   // ── 10. Reset ─────────────────────────────────────────────────────────────
 
   async resetConsolidation(userId: string, consolidationId: string) {
-    const consolidation = await this.prisma.monthlyConsolidation.findUnique({
-      where: { id: consolidationId },
-    });
+    const consolidation =
+      await this.consolidationRepository.findConsolidationById(consolidationId);
     if (!consolidation)
       throw new NotFoundException("Consolidação não encontrada");
     if (consolidation.userId !== userId) throw new ForbiddenException();
 
-    return this.prisma.$transaction(async (tx) => {
-      const items = await tx.budgetItem.findMany({
-        where: { consolidationId },
-      });
-
-      const transactionIds = items
-        .map((i) => i.transactionId)
-        .filter((id): id is string => id !== null);
-
-      if (transactionIds.length > 0) {
-        await tx.transaction.deleteMany({
-          where: { id: { in: transactionIds } },
-        });
-      }
-
-      await tx.budgetItem.deleteMany({
-        where: { consolidationId, ruleId: null },
-      });
-
-      await tx.budgetItem.updateMany({
-        where: { consolidationId },
-        data: { status: "PENDING", transactionId: null },
-      });
-
-      return tx.monthlyConsolidation.update({
-        where: { id: consolidationId },
-        data: { status: "OPEN", closedAt: null },
-        include: {
-          items: {
-            include: { member: true, category: true, transaction: true },
-            orderBy: { dueDate: "asc" },
-          },
-        },
-      });
-    });
+    return this.consolidationRepository.resetConsolidation(consolidationId);
   }
 
   // ── New methods for dashboard ─────────────────────────────────────────────
 
   async getDailyFlow(userId: string, consolidationId: string) {
-    const consolidation = await this.prisma.monthlyConsolidation.findFirst({
-      where: { id: consolidationId, userId },
-      include: {
-        items: {
-          where: {
-            status: { in: [BudgetItemStatus.PAID, BudgetItemStatus.RECEIVED] },
-          },
-          include: { transaction: true },
-        },
-      },
-    });
+    const consolidation =
+      await this.consolidationRepository.findConsolidationItemsWithTransactions(
+        consolidationId,
+        userId,
+      );
     if (!consolidation)
       throw new NotFoundException("Consolidação não encontrada");
 
@@ -629,14 +551,6 @@ export class ConsolidationService {
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
-
-  private async findItemForUser(userId: string, budgetItemId: string) {
-    const item = await this.prisma.budgetItem.findFirst({
-      where: { id: budgetItemId, consolidation: { userId } },
-    });
-    if (!item) throw new NotFoundException("Item não encontrado");
-    return item;
-  }
 
   /**
    * Returns every occurrence of a TransactionRule that falls within the given
@@ -720,9 +634,9 @@ export class ConsolidationService {
 
   private advance(date: Date, recurrence: string | null): Date {
     const d = new Date(date);
-    if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
-    else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
-    else if (recurrence === "YEARLY") d.setFullYear(d.getFullYear() + 1);
+    if (recurrence === "MONTHLY") d.setUTCMonth(d.getUTCMonth() + 1);
+    else if (recurrence === "WEEKLY") d.setUTCDate(d.getUTCDate() + 7);
+    else if (recurrence === "YEARLY") d.setUTCFullYear(d.getUTCFullYear() + 1);
     return d;
   }
 }

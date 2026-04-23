@@ -38,15 +38,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     routeTitles[pathname] ||
     (pathname.startsWith('/transactions') ? 'Entradas e Saídas' :
       pathname.startsWith('/consolidation') ? 'Consolidação Mensal' :
-      'OrganizAE');
+        'OrganizAE');
 
   const initials = user?.name
     ? user.name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0].toUpperCase())
-        .join('')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('')
     : 'U';
 
   return (
@@ -88,14 +88,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <Link to="/transactions/expense" className={cn(navLinkClass('/transactions/expense'), 'text-xs py-1.5')} onClick={() => setMobileMenuOpen(false)}>
                         <TrendingDown className="h-3.5 w-3.5 text-[#ff7c7c]" /> Saídas
                       </Link>
+                      <Link to="/categories" className={navLinkClass('/categories')} onClick={() => setMobileMenuOpen(false)}>
+                        <Tag className="h-4 w-4" /> Categorias
+                      </Link>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
 
-              <Link to="/categories" className={navLinkClass('/categories')} onClick={() => setMobileMenuOpen(false)}>
-                <Tag className="h-4 w-4" /> Categorias
-              </Link>
+
               <Link to="/members" className={navLinkClass('/members')} onClick={() => setMobileMenuOpen(false)}>
                 <Users className="h-4 w-4" /> Membros
               </Link>
@@ -151,14 +152,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link to="/transactions/expense" className={cn(navLinkClass('/transactions/expense'), 'text-xs py-1.5')}>
                     <TrendingDown className="h-3.5 w-3.5 text-[#ff7c7c]" /> Saídas
                   </Link>
+                  <Link to="/categories" className={navLinkClass('/categories')}>
+                    <Tag className="h-4 w-4" /> Categorias
+                  </Link>
                 </div>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
 
-          <Link to="/categories" className={navLinkClass('/categories')}>
-            <Tag className="h-4 w-4" /> Categorias
-          </Link>
           <Link to="/members" className={navLinkClass('/members')}>
             <Users className="h-4 w-4" /> Membros
           </Link>

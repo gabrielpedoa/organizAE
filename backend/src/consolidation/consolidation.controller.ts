@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { JwtUser } from "../auth/jwt-user.interface";
@@ -21,6 +22,8 @@ import { ConfirmReceiptDto } from "./dto/confirm-receipt.dto";
 import { GenerateConsolidationDto } from "./dto/generate-consolidation.dto";
 import { UpdateBudgetItemDto } from "./dto/update-budget-item.dto";
 
+@ApiTags("consolidations")
+@ApiBearerAuth()
 @Controller("consolidations")
 @UseGuards(JwtAuthGuard)
 export class ConsolidationController {
@@ -30,6 +33,9 @@ export class ConsolidationController {
 
   /** Returns the consolidation for a given month/year, or null if none exists yet. */
   @Get()
+  @ApiOperation({
+    summary: "Retorna consolidação do mês/ano. Parâmetros: ?month e ?year",
+  })
   findByMonthYear(
     @CurrentUser() user: JwtUser,
     @Query("month") month: string,
@@ -40,6 +46,9 @@ export class ConsolidationController {
 
   /** Generates (or refreshes) BudgetItems for the given month/year. Idempotent. */
   @Post("generate")
+  @ApiOperation({
+    summary: "Gera ou atualiza BudgetItems do período. Idempotente.",
+  })
   generate(
     @CurrentUser() user: JwtUser,
     @Body() dto: GenerateConsolidationDto,
@@ -53,18 +62,25 @@ export class ConsolidationController {
 
   /** Full summary: planned vs realised, by category, by member, items by status. */
   @Get(":id/summary")
+  @ApiOperation({
+    summary: "Resumo planejado vs realizado por categoria e membro",
+  })
   summary(@CurrentUser() user: JwtUser, @Param("id") id: string) {
     return this.consolidation.getConsolidationSummary(user.id, id);
   }
 
   /** Daily flow: income, expense, balance per day. */
   @Get(":id/daily-flow")
+  @ApiOperation({ summary: "Fluxo diário de receitas e despesas" })
   dailyFlow(@CurrentUser() user: JwtUser, @Param("id") id: string) {
     return this.consolidation.getDailyFlow(user.id, id);
   }
 
   /** Closes the period. Rejects if PENDING items remain unless force=true. */
   @Post(":id/close")
+  @ApiOperation({
+    summary: "Fecha o período. Rejeita se houver itens pendentes salvo force=true",
+  })
   close(
     @CurrentUser() user: JwtUser,
     @Param("id") id: string,
@@ -75,6 +91,7 @@ export class ConsolidationController {
 
   /** Adds a manually-created (avulso) BudgetItem to the consolidation. */
   @Post(":id/items")
+  @ApiOperation({ summary: "Adiciona item avulso à consolidação" })
   addItem(
     @CurrentUser() user: JwtUser,
     @Param("id") id: string,
@@ -90,6 +107,9 @@ export class ConsolidationController {
 
   /** Edits amount / description / dueDate of a PENDING item. */
   @Patch("items/:itemId")
+  @ApiOperation({
+    summary: "Edita amount, description ou dueDate de item PENDENTE",
+  })
   updateItem(
     @CurrentUser() user: JwtUser,
     @Param("itemId") itemId: string,
@@ -104,6 +124,9 @@ export class ConsolidationController {
 
   /** Confirms payment of an EXPENSE item. Creates a real Transaction. */
   @Post("items/:itemId/pay")
+  @ApiOperation({
+    summary: "Confirma pagamento de despesa e cria Transaction",
+  })
   confirmPayment(
     @CurrentUser() user: JwtUser,
     @Param("itemId") itemId: string,
@@ -118,6 +141,9 @@ export class ConsolidationController {
 
   /** Confirms receipt of an INCOME item. Creates a real Transaction. */
   @Post("items/:itemId/receive")
+  @ApiOperation({
+    summary: "Confirma recebimento de receita e cria Transaction",
+  })
   confirmReceipt(
     @CurrentUser() user: JwtUser,
     @Param("itemId") itemId: string,
@@ -132,12 +158,18 @@ export class ConsolidationController {
 
   /** Resets the consolidation: deletes linked transactions, removes avulso items, reopens period. */
   @Post(":id/reset")
+  @ApiOperation({
+    summary: "Reseta consolidação: desfaz confirmações e reabre período",
+  })
   reset(@CurrentUser() user: JwtUser, @Param("id") id: string) {
     return this.consolidation.resetConsolidation(user.id, id);
   }
 
   /** Cancels a BudgetItem. If already confirmed, reverses (deletes) the Transaction. */
   @Post("items/:itemId/cancel")
+  @ApiOperation({
+    summary: "Cancela item. Se confirmado, estorna a Transaction.",
+  })
   cancelItem(
     @CurrentUser() user: JwtUser,
     @Param("itemId") itemId: string,
