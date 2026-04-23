@@ -9,6 +9,7 @@ import { CategoriesPage } from '@/pages/CategoriesPage';
 import { MembersPage } from '@/pages/MembersPage';
 import { ConsolidationPage } from '@/pages/ConsolidationPage';
 import { ConsolidationReportPage } from '@/pages/ConsolidationReportPage';
+import { NotFoundPage } from '@/pages/NotFoundPage';
 import { useAuth } from './context/AuthContext';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -32,7 +33,7 @@ export function App() {
         <Route path="/members" element={<PrivateRoute><MembersPage /></PrivateRoute>} />
         <Route path="/consolidation" element={<PrivateRoute><ConsolidationPage /></PrivateRoute>} />
         <Route path="/consolidation/:id" element={<PrivateRoute><ConsolidationReportPage /></PrivateRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

@@ -10,27 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useConsolidationReport } from '@/hooks/useConsolidationReport';
 import { BudgetItem, ExpenseType } from '@/lib/types';
-import { cn, formatCurrency } from '@/lib/utils';
-
-const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-];
-
-const EXPENSE_TYPE_LABELS: Record<ExpenseType, string> = {
-  FIXED: 'Fixa',
-  VARIABLE: 'Variável',
-  INVESTMENT: 'Investimento',
-  TRANSFER: 'Transferência',
-};
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { cn, formatCurrency, formatDateOnly } from '@/lib/utils';
+import { MONTH_NAMES, EXPENSE_TYPE_LABELS } from '@/lib/constants';
 
 function SummaryCard({
   label,
@@ -163,7 +144,12 @@ export function ConsolidationReportPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/consolidation')}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Voltar para consolidação"
+          onClick={() => navigate('/consolidation')}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -171,7 +157,7 @@ export function ConsolidationReportPage() {
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
             <Lock className="h-3 w-3" />
             {summary.closedAt
-              ? `Fechado em ${formatDate(summary.closedAt)}`
+              ? `Fechado em ${formatDateOnly(summary.closedAt, { day: 'numeric', month: 'short', year: 'numeric' })}`
               : 'Período fechado'}
           </p>
         </div>

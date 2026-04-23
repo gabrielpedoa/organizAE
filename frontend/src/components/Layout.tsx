@@ -59,7 +59,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <h1 className="text-lg font-bold text-white">OrganizAE</h1>
                 <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.6)' }}>{user?.name}</p>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/80 hover:text-white hover:bg-white/10" onClick={() => setMobileMenuOpen(false)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 text-white/80 hover:text-white hover:bg-white/10"
+                aria-label="Fechar menu"
+                onClick={() => setMobileMenuOpen(false)}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -176,7 +182,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col min-w-0">
         <header className="fixed left-0 right-0 top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200/70 bg-background px-4 shadow-sm md:hidden">
-          <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(true)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            aria-label="Abrir menu"
+            onClick={() => setMobileMenuOpen(true)}
+          >
             <Menu className="h-5 w-5" />
           </Button>
           <div className="text-base font-semibold">{currentTitle}</div>

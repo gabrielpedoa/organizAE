@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Member, Category, TransactionRuleFull } from "@/lib/types";
 import { formatCurrency, formatDateOnly, dateToUTC } from "@/lib/utils";
@@ -13,6 +13,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -31,6 +42,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { EditRuleModal } from "@/components/entries/EditRuleModal";
+import { RECURRENCE_LABELS } from "@/lib/constants";
 
 type DialogMode = "recurring" | "installment";
 type Props = { type: "INCOME" | "EXPENSE" };
@@ -49,12 +61,6 @@ interface BulkRow {
   totalInstallments: number;
   expenseType: string;
 }
-const REC_LABEL: Record<string, string> = {
-  MONTHLY: 'Mensal',
-  WEEKLY: 'Semanal',
-  YEARLY: 'Anual',
-};
-
 function RuleBadge({ rule }: { rule: TransactionRuleFull }) {
   if (rule.ruleType === "INSTALLMENT") {
     return (
@@ -73,20 +79,19 @@ function RuleBadge({ rule }: { rule: TransactionRuleFull }) {
   }
   return (
     <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-      <RefreshCw className="h-3 w-3" /> {REC_LABEL[rule.recurrence ?? ""] ?? "Recorrente"}
+      <RefreshCw className="h-3 w-3" /> {RECURRENCE_LABELS[rule.recurrence ?? ""] ?? "Recorrente"}
     </span>
   );
 }
 
 
-let _rowCounter = 0;
 function newRow(
   defaultMemberId: string,
   defaultCategoryId: string,
   type: "INCOME" | "EXPENSE",
 ): BulkRow {
   return {
-    _id: String(++_rowCounter),
+    _id: crypto.randomUUID(),
     description: "",
     amount: "",
     date: new Date().toISOString().slice(0, 10),
@@ -119,12 +124,10 @@ function BulkDialog({
 
   const [rows, setRows] = useState<BulkRow[]>([]);
 
-  const resetRows = () =>
-    setRows([newRow(defaultMemberId, defaultCategoryId, type)]);
-
   useEffect(() => {
-    if (open) resetRows();
-  }, [open, defaultMemberId, defaultCategoryId]);
+    if (!open) return;
+    setRows([newRow(defaultMemberId, defaultCategoryId, type)]);
+  }, [open, defaultMemberId, defaultCategoryId, type]);
 
   const addRow = () => {
     const last = rows[rows.length - 1];
@@ -158,23 +161,24 @@ function BulkDialog({
     }
 
     try {
-      for (const r of rows) {
-        await api.post("/transactions/rules", {
-          description: r.description,
-          amount: Number(r.amount),
-          type,
-          memberId: r.memberId,
-          categoryId: r.categoryId,
-          ruleType: r.mode === "recurring" ? "RECURRING" : "INSTALLMENT",
-          recurrence: r.mode === "recurring" ? r.recurrence : undefined,
-          isVariable: r.mode === "recurring" ? r.isVariable : false,
-          startDate: dateToUTC(r.date),
-          endDate: r.mode === "recurring" && r.endDate ? dateToUTC(r.endDate) : undefined,
-          totalInstallments:
-            r.mode === "installment" ? r.totalInstallments : undefined,
-          expenseType: type === "EXPENSE" && r.expenseType ? r.expenseType : undefined,
-        });
-      }
+      await Promise.all(
+        rows.map((r) =>
+          api.post("/transactions/rules", {
+            description: r.description,
+            amount: Number(r.amount),
+            type,
+            memberId: r.memberId,
+            categoryId: r.categoryId,
+            ruleType: r.mode === "recurring" ? "RECURRING" : "INSTALLMENT",
+            recurrence: r.mode === "recurring" ? r.recurrence : undefined,
+            isVariable: r.mode === "recurring" ? r.isVariable : false,
+            startDate: dateToUTC(r.date),
+            endDate: r.mode === "recurring" && r.endDate ? dateToUTC(r.endDate) : undefined,
+            totalInstallments: r.mode === "installment" ? r.totalInstallments : undefined,
+            expenseType: type === "EXPENSE" && r.expenseType ? r.expenseType : undefined,
+          }),
+        ),
+      );
 
       toast.success(
         `${rows.length} lançamento${rows.length > 1 ? "s" : ""} criado${rows.length > 1 ? "s" : ""}`,
@@ -343,6 +347,7 @@ function BulkDialog({
                     {rows.length > 1 && (
                       <button
                         onClick={() => removeRow(row._id)}
+                        aria-label="Remover linha"
                         className="text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <X className="h-4 w-4" />
@@ -368,6 +373,82 @@ function BulkDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RuleCard({
+  rule,
+  type,
+  onEdit,
+  onRemove,
+}: {
+  rule: TransactionRuleFull;
+  type: 'INCOME' | 'EXPENSE';
+  onEdit: (rule: TransactionRuleFull) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border p-3 space-y-2 bg-card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{rule.description}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {rule.category.name} · {rule.member.name}
+          </p>
+        </div>
+        <p className={`font-semibold text-sm shrink-0 ${type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+          {type === 'INCOME' ? '+' : '-'}{formatCurrency(Number(rule.amount))}
+        </p>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <RuleBadge rule={rule} />
+          <span className="text-xs text-muted-foreground">
+            desde {formatDateOnly(rule.startDate)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={`Editar regra ${rule.description}`}
+            onClick={() => onEdit(rule)}
+          >
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={`Remover regra ${rule.description}`}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação remove a regra "{rule.description}" e todos os lançamentos vinculados a ela. Não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => onRemove(rule.id)}
+                >
+                  Remover
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -397,12 +478,12 @@ export function TransactionsPage({ type }: Props) {
 
   // Loads all TransactionRules for this type.
   // Member filtering happens client-side via `displayedRules` below.
-  const load = () => {
+  const load = useCallback(() => {
     api
       .get<TransactionRuleFull[]>(`/transactions/rules?type=${type}`)
       .then(setRules)
       .catch(() => null);
-  };
+  }, [type]);
 
   const resetForm = () => {
     setMemberId("");
@@ -417,7 +498,11 @@ export function TransactionsPage({ type }: Props) {
   };
 
   useEffect(() => {
-    load();
+    let cancelled = false;
+    api.get<TransactionRuleFull[]>(`/transactions/rules?type=${type}`)
+      .then((data) => { if (!cancelled) setRules(data); })
+      .catch(() => null);
+    return () => { cancelled = true; };
   }, [type]);
   useEffect(() => {
     api.get<Member[]>("/members").then(setMembers);
@@ -453,9 +538,13 @@ export function TransactionsPage({ type }: Props) {
   };
 
   const removeRule = async (id: string) => {
-    await api.delete(`/transactions/rules/${id}`);
-    toast.success("Removido");
-    load();
+    try {
+      await api.delete(`/transactions/rules/${id}`);
+      toast.success("Regra removida");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover regra");
+    }
   };
 
   // Client-side member filter (backend listRules doesn't filter by memberId)
@@ -713,7 +802,27 @@ export function TransactionsPage({ type }: Props) {
         </Select>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      {/* Mobile: cards */}
+      <div className="md:hidden space-y-2">
+        {displayedRules.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8 text-sm">
+            Nenhuma regra cadastrada
+          </p>
+        ) : (
+          displayedRules.map((r) => (
+            <RuleCard
+              key={r.id}
+              rule={r}
+              type={type}
+              onEdit={setEditRule}
+              onRemove={removeRule}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Desktop: tabela */}
+      <div className="hidden md:block border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
@@ -729,47 +838,59 @@ export function TransactionsPage({ type }: Props) {
           <tbody>
             {displayedRules.length === 0 && (
               <tr>
-                <td
-                  colSpan={7}
-                  className="text-center p-6 text-muted-foreground"
-                >
+                <td colSpan={7} className="text-center p-6 text-muted-foreground">
                   Nenhuma regra cadastrada
                 </td>
               </tr>
             )}
             {displayedRules.map((r) => (
               <tr key={r.id} className="border-t hover:bg-muted/50">
-                <td className="p-3">
-                  {formatDateOnly(r.startDate)}
-                </td>
+                <td className="p-3">{formatDateOnly(r.startDate)}</td>
                 <td className="p-3">{r.description}</td>
                 <td className="p-3">{r.category.name}</td>
                 <td className="p-3">{r.member.name}</td>
-                <td className="p-3">
-                  <RuleBadge rule={r} />
-                </td>
-                <td
-                  className={`p-3 text-right font-medium ${type === "INCOME" ? "text-green-600" : "text-red-600"}`}
-                >
-                  {type === "INCOME" ? "+" : "-"}
-                  {formatCurrency(Number(r.amount))}
+                <td className="p-3"><RuleBadge rule={r} /></td>
+                <td className={`p-3 text-right font-medium ${type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+                  {type === 'INCOME' ? '+' : '-'}{formatCurrency(Number(r.amount))}
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label={`Editar regra ${r.description}`}
                       onClick={() => setEditRule(r)}
                     >
                       <Pencil className="h-4 w-4 text-muted-foreground" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeRule(r.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Remover regra ${r.description}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remover regra?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta ação remove a regra "{r.description}" e todos os lançamentos vinculados a ela. Não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => removeRule(r.id)}
+                          >
+                            Remover
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </td>
               </tr>

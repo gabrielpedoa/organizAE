@@ -12,23 +12,22 @@ export function useDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
-
       try {
-        // Find consolidation for the selected month/year
-        const consolidationData = await api.get<Consolidation>(`/consolidations?month=${selectedMonth}&year=${selectedYear}`);
-
+        const consolidationData = await api.get<Consolidation>(
+          `/consolidations?month=${selectedMonth}&year=${selectedYear}`
+        );
+        if (cancelled) return;
         setConsolidation(consolidationData);
-
         if (consolidationData) {
-          // Fetch summary and daily flow in parallel
           const [summaryData, dailyFlowData] = await Promise.all([
             api.get<Summary>(`/consolidations/${consolidationData.id}/summary`),
             api.get<DailyFlowData>(`/consolidations/${consolidationData.id}/daily-flow`),
           ]);
-
+          if (cancelled) return;
           setSummary(summaryData);
           setDailyFlow(dailyFlowData);
         } else {
@@ -36,16 +35,17 @@ export function useDashboard() {
           setDailyFlow(null);
         }
       } catch (err) {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar dados');
         setConsolidation(null);
         setSummary(null);
         setDailyFlow(null);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
-
     fetchData();
+    return () => { cancelled = true; };
   }, [selectedMonth, selectedYear]);
 
   return {

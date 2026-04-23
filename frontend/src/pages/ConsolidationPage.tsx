@@ -4,8 +4,6 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Lock,
   Plus,
   RotateCcw,
@@ -25,19 +23,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
 import { AddBudgetItemModal } from '@/components/consolidation/AddBudgetItemModal';
 import { ConfirmPaymentModal } from '@/components/consolidation/ConfirmPaymentModal';
 import { EditBudgetItemModal } from '@/components/consolidation/EditBudgetItemModal';
 import { useConsolidation, ConfirmPaymentPayload, ConfirmReceiptPayload } from '@/hooks/useConsolidation';
 import { BudgetItem, BudgetItemStatus } from '@/lib/types';
 import { cn, formatCurrency, formatDateOnly } from '@/lib/utils';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
-];
+import { MonthNavigator } from '@/components/ui/MonthNavigator';
 
 type Tab = 'pending' | 'paid' | 'cancelled';
 
@@ -66,12 +59,14 @@ function SummaryCard({
 }) {
   return (
     <Card>
-      <CardContent className="pt-4 pb-4">
-        <p className="text-xs text-muted-foreground mb-1">{label}</p>
-        <p className={cn('text-lg font-bold', colorClass)}>{formatCurrency(value)}</p>
+      <CardContent className="p-3 sm:pt-4 sm:pb-4 sm:px-4">
+        <p className="text-xs text-muted-foreground mb-1 leading-tight">{label}</p>
+        <p className={cn('text-base sm:text-lg font-bold', colorClass)}>
+          {formatCurrency(value)}
+        </p>
         {diff !== undefined && Math.abs(diff) > 0.001 && (
-          <p className={cn('text-xs mt-1', diff < 0 ? 'text-amber-600' : 'text-green-600')}>
-            {diff > 0 ? '+' : ''}{formatCurrency(diff)} vs previsto
+          <p className={cn('text-xs mt-0.5', diff < 0 ? 'text-amber-600' : 'text-green-600')}>
+            {diff > 0 ? '+' : ''}{formatCurrency(diff)}
           </p>
         )}
       </CardContent>
@@ -139,75 +134,85 @@ interface ItemRowProps {
 
 function ItemRow({ item, onPay, onEdit, onCancel }: ItemRowProps) {
   const isIncome = item.type === 'INCOME';
+  const isPending = item.status === 'PENDING';
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-      {/* Type icon */}
-      <div className="shrink-0">
-        {isIncome
-          ? <ArrowUpCircle className="h-8 w-8 text-green-500" />
-          : <ArrowDownCircle className="h-8 w-8 text-red-500" />
-        }
+    <div className="rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+      {/* Linha 1: ícone + descrição + valor */}
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 mt-0.5">
+          {isIncome
+            ? <ArrowUpCircle className="h-5 w-5 text-green-500" />
+            : <ArrowDownCircle className="h-5 w-5 text-red-500" />
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{item.description}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {item.category?.name}
+            {item.member && <> · {item.member.name}</>}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={cn('font-semibold text-sm', isIncome ? 'text-green-600' : 'text-red-600')}>
+            {formatCurrency(Number(item.amount))}
+          </p>
+        </div>
       </div>
 
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">{item.description}</p>
-        <p className="text-xs text-muted-foreground">
-          {item.category?.name}
-          {item.member && <> · {item.member.name}</>}
-        </p>
-        {item.status === 'PAID' || item.status === 'RECEIVED' ? (
-          item.transaction && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {formatFullDate(item.transaction.date)} · {formatCurrency(Number(item.transaction.amount))}
-              {item.transaction.note && <> · <span className="italic">{item.transaction.note}</span></>}
-            </p>
-          )
+      {/* Linha 2: info contextual (data real, motivo cancelamento, vencimento) */}
+      <div className="mt-1.5 ml-8">
+        {(item.status === 'PAID' || item.status === 'RECEIVED') && item.transaction ? (
+          <p className="text-xs text-muted-foreground">
+            Pago em {formatFullDate(item.transaction.date)}
+            {Number(item.transaction.amount) !== Number(item.amount) && (
+              <> · <span className="font-medium">{formatCurrency(Number(item.transaction.amount))}</span> realizado</>
+            )}
+            {item.transaction.note && <> · <span className="italic">{item.transaction.note}</span></>}
+          </p>
         ) : item.status === 'CANCELLED' && item.note ? (
-          <p className="text-xs text-muted-foreground italic mt-0.5">Motivo: {item.note}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+          <p className="text-xs text-muted-foreground italic">Motivo: {item.note}</p>
+        ) : item.status === 'PENDING' ? (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
             <CalendarDays className="h-3 w-3" />
             vence {formatDueDate(item.dueDate)}
           </p>
-        )}
+        ) : null}
       </div>
 
-      {/* Planned amount */}
-      <div className="text-right shrink-0">
-        <p className={cn('font-semibold text-sm', isIncome ? 'text-green-600' : 'text-red-600')}>
-          {formatCurrency(Number(item.amount))}
-        </p>
-        {(item.status === 'PAID' || item.status === 'RECEIVED') && item.transaction && (
-          <p className="text-xs text-muted-foreground line-through">
-            previsto
-          </p>
+      {/* Linha 3: status + ações (apenas se pendente) */}
+      <div className="mt-2 ml-8 flex items-center justify-between gap-2">
+        <StatusBadge status={item.status} />
+        {isPending && (
+          <div className="flex gap-1 shrink-0">
+            <Button
+              size="sm"
+              variant={isIncome ? 'outline' : 'default'}
+              className="text-xs h-7 px-2"
+              onClick={() => onPay(item)}
+            >
+              {isIncome ? 'Receber' : 'Pagar'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs h-7 px-2"
+              onClick={() => onEdit(item)}
+            >
+              Editar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive"
+              aria-label="Cancelar item"
+              onClick={() => onCancel(item)}
+            >
+              <XCircle className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         )}
       </div>
-
-      {/* Status */}
-      <StatusBadge status={item.status} />
-
-      {/* Actions */}
-      {item.status === 'PENDING' && (
-        <div className="flex gap-1 shrink-0">
-          <Button size="sm" variant={isIncome ? 'outline' : 'default'} className="text-xs h-7 px-2" onClick={() => onPay(item)}>
-            {isIncome ? 'Receber' : 'Pagar'}
-          </Button>
-          <Button size="sm" variant="ghost" className="text-xs h-7 px-2" onClick={() => onEdit(item)}>
-            Editar
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive"
-            onClick={() => onCancel(item)}
-          >
-            <XCircle className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -227,6 +232,9 @@ export function ConsolidationPage() {
   const [editItem, setEditItem] = useState<BudgetItem | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [cancelDialogItem, setCancelDialogItem] = useState<BudgetItem | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   const hasPending = (summary?.items.pending.length ?? 0) > 0;
   const isClosed = consolidation?.status === 'CLOSED';
@@ -248,10 +256,16 @@ export function ConsolidationPage() {
 
   const handleEdit = (item: BudgetItem) => setEditItem(item);
 
-  const handleCancel = async (item: BudgetItem) => {
-    const reason = window.prompt('Motivo do cancelamento (opcional):') ?? undefined;
+  const handleCancel = (item: BudgetItem) => {
+    setCancelReason('');
+    setCancelDialogItem(item);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelDialogItem) return;
     try {
-      await cancelItem(item, reason || undefined);
+      await cancelItem(cancelDialogItem, cancelReason || undefined);
+      setCancelDialogItem(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao cancelar');
     }
@@ -268,17 +282,17 @@ export function ConsolidationPage() {
     }
   };
 
-  const handleCloseMonth = async () => {
-    if (hasPending) {
-      const confirmed = window.confirm(
-        `Há ${summary?.items.pending.length} item(ns) pendente(s). Fechar o período mesmo assim?`,
-      );
-      if (!confirmed) return;
-    }
+  const handleCloseMonth = () => {
+    setCloseDialogOpen(true);
+  };
+
+  const handleConfirmClose = async () => {
     try {
       await closeConsolidation(hasPending);
+      setCloseDialogOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao fechar');
+      setCloseDialogOpen(false);
     }
   };
 
@@ -286,7 +300,8 @@ export function ConsolidationPage() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <div className="space-y-3">
+        {/* Linha 1: título + status */}
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-bold">Consolidação Mensal</h2>
           {consolidation && (
@@ -301,37 +316,55 @@ export function ConsolidationPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Period navigator */}
-          <div className="flex items-center gap-1 border rounded-md">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium w-36 text-center">
-              {MONTH_NAMES[month - 1]} {year}
-            </span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Linha 2: navegador de mês centralizado no mobile, à esquerda no desktop */}
+        <div className="flex justify-center sm:justify-start">
+          <MonthNavigator
+            month={month}
+            year={year}
+            onNavigate={navigateMonth}
+            disabled={isLoading}
+          />
+        </div>
 
-          {consolidation && !isClosed && (
-            <Button size="sm" variant="outline" onClick={handleCloseMonth} disabled={isLoading}>
-              Fechar mês
-            </Button>
-          )}
+        {/* Linha 3: botões de ação — wrap no mobile, inline no desktop */}
+        {consolidation && (
+          <div className="flex flex-wrap gap-2">
+            {!isClosed && (
+              <AlertDialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={isLoading} className="flex-1 sm:flex-none">
+                    Fechar mês
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Fechar período?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {hasPending
+                        ? `Há ${summary?.items.pending.length} item(ns) pendente(s). Deseja fechar o período mesmo assim?`
+                        : 'Confirma o fechamento do período? Esta ação pode ser revertida com o reset.'}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirmClose}>
+                      Fechar período
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
 
-          {consolidation && !isClosed && (
-            <Button size="sm" variant="outline" onClick={() => setAddItemOpen(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar lançamento
-            </Button>
-          )}
+            {!isClosed && (
+              <Button size="sm" variant="outline" onClick={() => setAddItemOpen(true)} className="flex-1 sm:flex-none">
+                <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar lançamento
+              </Button>
+            )}
 
-          {consolidation && (
             <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
               <AlertDialogTrigger asChild>
-                <Button size="sm" variant="destructive" disabled={isResetting || isLoading}>
-                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Resetar consolidação
+                <Button size="sm" variant="destructive" disabled={isResetting || isLoading} className="flex-1 sm:flex-none">
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Resetar
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -372,8 +405,8 @@ export function ConsolidationPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── Loading ── */}
@@ -399,7 +432,7 @@ export function ConsolidationPage() {
 
       {/* ── Summary cards ── */}
       {!isLoading && summary && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
           <SummaryCard
             label="Receitas Previstas"
             value={summary.income.planned}
@@ -521,6 +554,32 @@ export function ConsolidationPage() {
           setAddItemOpen(false);
         }}
       />
+
+      <AlertDialog open={!!cancelDialogItem} onOpenChange={(open) => !open && setCancelDialogItem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Informe um motivo para o cancelamento (opcional).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            placeholder="Motivo do cancelamento..."
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            className="mx-6"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCancelDialogItem(null)}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleConfirmCancel}
+            >
+              Confirmar cancelamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
