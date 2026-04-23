@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { SummaryRepository } from './summary.repository';
 
 export interface MemberSummary {
   memberId: string;
@@ -16,19 +16,22 @@ export interface CategorySummary {
 
 @Injectable()
 export class SummaryService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(SummaryService.name);
+
+  constructor(private readonly summaryRepository: SummaryRepository) {}
 
   async getSummary(userId: string, month: string) {
     const [year, m] = month.split('-').map(Number);
-    const start = new Date(year, m - 1, 1);
-    const end = new Date(year, m, 1);
+    const start = new Date(Date.UTC(year, m - 1, 1));
+    const end = new Date(Date.UTC(year, m, 1));
 
     // consolidationId: null mirrors the rule-generated transactions (pre-consolidation flow).
     // Consolidation-confirmed transactions (consolidationId IS NOT NULL) are counted
     // separately through the Consolidação Mensal module and must not be double-counted here.
-    const transactions = await this.prisma.transaction.findMany({
-      where: { member: { userId }, date: { gte: start, lt: end }, consolidationId: null },
-      include: { member: true, category: true },
+    const transactions = await this.summaryRepository.findTransactions({
+      member: { userId },
+      date: { gte: start, lt: end },
+      consolidationId: null,
     });
 
     const totalIncome = transactions
