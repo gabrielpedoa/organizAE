@@ -3,14 +3,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   BudgetItemStatus,
   Prisma,
   TransactionRule,
   TransactionType,
-} from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
 
 // ─── DTOs (inline, mirrored in dto/ files for the controller) ─────────────────
 
@@ -34,7 +34,7 @@ export interface AddBudgetItemData {
   description: string;
   dueDate: Date;
   installmentNumber?: number;
-  expenseType?: 'FIXED' | 'VARIABLE' | 'INVESTMENT' | 'TRANSFER';
+  expenseType?: "FIXED" | "VARIABLE" | "INVESTMENT" | "TRANSFER";
   note?: string;
 }
 
@@ -58,21 +58,27 @@ export class ConsolidationService {
    * generates PENDING BudgetItems for every TransactionRule active in that period.
    * Rules that already have a BudgetItem in this consolidation are skipped.
    */
-  async generateMonthlyConsolidation(userId: string, month: number, year: number) {
+  async generateMonthlyConsolidation(
+    userId: string,
+    month: number,
+    year: number,
+  ) {
     const consolidation = await this.prisma.monthlyConsolidation.upsert({
       where: { userId_month_year: { userId, month, year } },
       create: { userId, month, year },
       update: {},
     });
 
-    if (consolidation.status === 'CLOSED') {
-      throw new BadRequestException('Consolidação já está fechada');
+    if (consolidation.status === "CLOSED") {
+      throw new BadRequestException("Consolidação já está fechada");
     }
 
     const periodStart = new Date(year, month - 1, 1);
     const periodEnd = new Date(year, month, 0); // last day of month
 
-    const rules = await this.prisma.transactionRule.findMany({ where: { userId } });
+    const rules = await this.prisma.transactionRule.findMany({
+      where: { userId },
+    });
 
     // Rules that already have a BudgetItem in this period — skip them
     const existing = await this.prisma.budgetItem.findMany({
@@ -86,7 +92,13 @@ export class ConsolidationService {
     for (const rule of rules) {
       if (existingRuleIds.has(rule.id)) continue;
 
-      const occurrences = this.occurrencesInMonth(rule, month, year, periodStart, periodEnd);
+      const occurrences = this.occurrencesInMonth(
+        rule,
+        month,
+        year,
+        periodStart,
+        periodEnd,
+      );
       for (const occ of occurrences) {
         toCreate.push({
           consolidationId: consolidation.id,
@@ -99,14 +111,17 @@ export class ConsolidationService {
           description: occ.description,
           dueDate: occ.date,
           installmentNumber: occ.installmentNumber ?? null,
-          status: 'PENDING',
+          status: "PENDING",
         });
       }
     }
 
     if (toCreate.length > 0) {
       // skipDuplicates handles race conditions and the WEEKLY multi-occurrence edge case
-      await this.prisma.budgetItem.createMany({ data: toCreate, skipDuplicates: true });
+      await this.prisma.budgetItem.createMany({
+        data: toCreate,
+        skipDuplicates: true,
+      });
     }
 
     return this.prisma.monthlyConsolidation.findUnique({
@@ -114,7 +129,7 @@ export class ConsolidationService {
       include: {
         items: {
           include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: 'asc' },
+          orderBy: { dueDate: "asc" },
         },
       },
     });
@@ -122,14 +137,18 @@ export class ConsolidationService {
 
   // ── 2. Confirm payment (EXPENSE → PAID) ───────────────────────────────────
 
-  async confirmPayment(userId: string, budgetItemId: string, data: ConfirmPaymentData) {
+  async confirmPayment(
+    userId: string,
+    budgetItemId: string,
+    data: ConfirmPaymentData,
+  ) {
     const item = await this.findItemForUser(userId, budgetItemId);
 
-    if (item.status !== 'PENDING') {
-      throw new BadRequestException('Item não está pendente');
+    if (item.status !== "PENDING") {
+      throw new BadRequestException("Item não está pendente");
     }
     if (item.type !== TransactionType.EXPENSE) {
-      throw new BadRequestException('Use confirmReceipt para receitas');
+      throw new BadRequestException("Use confirmReceipt para receitas");
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -163,14 +182,18 @@ export class ConsolidationService {
 
   // ── 3. Confirm receipt (INCOME → RECEIVED) ────────────────────────────────
 
-  async confirmReceipt(userId: string, budgetItemId: string, data: ConfirmReceiptData) {
+  async confirmReceipt(
+    userId: string,
+    budgetItemId: string,
+    data: ConfirmReceiptData,
+  ) {
     const item = await this.findItemForUser(userId, budgetItemId);
 
-    if (item.status !== 'PENDING') {
-      throw new BadRequestException('Item não está pendente');
+    if (item.status !== "PENDING") {
+      throw new BadRequestException("Item não está pendente");
     }
     if (item.type !== TransactionType.INCOME) {
-      throw new BadRequestException('Use confirmPayment para despesas');
+      throw new BadRequestException("Use confirmPayment para despesas");
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -208,11 +231,15 @@ export class ConsolidationService {
    * If the item was already confirmed (PAID/RECEIVED), the linked Transaction
    * is deleted (hard reversal). The FK cascade sets transactionId → null.
    */
-  async cancelBudgetItem(userId: string, budgetItemId: string, reason?: string) {
+  async cancelBudgetItem(
+    userId: string,
+    budgetItemId: string,
+    reason?: string,
+  ) {
     const item = await this.findItemForUser(userId, budgetItemId);
 
     if (item.status === BudgetItemStatus.CANCELLED) {
-      throw new BadRequestException('Item já está cancelado');
+      throw new BadRequestException("Item já está cancelado");
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -237,18 +264,26 @@ export class ConsolidationService {
   /**
    * Edits a PENDING BudgetItem. Never touches the originating TransactionRule.
    */
-  async updateBudgetItem(userId: string, budgetItemId: string, data: UpdateBudgetItemData) {
+  async updateBudgetItem(
+    userId: string,
+    budgetItemId: string,
+    data: UpdateBudgetItemData,
+  ) {
     const item = await this.findItemForUser(userId, budgetItemId);
 
     if (item.status !== BudgetItemStatus.PENDING) {
-      throw new BadRequestException('Apenas itens PENDENTES podem ser editados');
+      throw new BadRequestException(
+        "Apenas itens PENDENTES podem ser editados",
+      );
     }
 
     return this.prisma.budgetItem.update({
       where: { id: budgetItemId },
       data: {
         ...(data.amount !== undefined ? { amount: data.amount } : {}),
-        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.description !== undefined
+          ? { description: data.description }
+          : {}),
         ...(data.dueDate !== undefined ? { dueDate: data.dueDate } : {}),
         ...(data.note !== undefined ? { note: data.note } : {}),
       },
@@ -259,20 +294,30 @@ export class ConsolidationService {
   // ── 6. Add avulso item ────────────────────────────────────────────────────
 
   /** Adds a manually-created BudgetItem (no originating TransactionRule). */
-  async addBudgetItem(userId: string, consolidationId: string, data: AddBudgetItemData) {
+  async addBudgetItem(
+    userId: string,
+    consolidationId: string,
+    data: AddBudgetItemData,
+  ) {
     const consolidation = await this.prisma.monthlyConsolidation.findFirst({
       where: { id: consolidationId, userId },
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
-    if (consolidation.status === 'CLOSED') {
-      throw new BadRequestException('Não é possível adicionar itens a uma consolidação fechada');
+    if (!consolidation)
+      throw new NotFoundException("Consolidação não encontrada");
+    if (consolidation.status === "CLOSED") {
+      throw new BadRequestException(
+        "Não é possível adicionar itens a uma consolidação fechada",
+      );
     }
 
     const [member, category] = await Promise.all([
       this.prisma.member.findFirst({ where: { id: data.memberId, userId } }),
-      this.prisma.category.findFirst({ where: { id: data.categoryId, userId } }),
+      this.prisma.category.findFirst({
+        where: { id: data.categoryId, userId },
+      }),
     ]);
-    if (!member || !category) throw new NotFoundException('Membro ou categoria não encontrado');
+    if (!member || !category)
+      throw new NotFoundException("Membro ou categoria não encontrado");
 
     return this.prisma.budgetItem.create({
       data: {
@@ -304,17 +349,22 @@ export class ConsolidationService {
       include: {
         items: {
           include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: 'asc' },
+          orderBy: { dueDate: "asc" },
         },
       },
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+    if (!consolidation)
+      throw new NotFoundException("Consolidação não encontrada");
 
     type Item = (typeof consolidation.items)[number];
-    const active = consolidation.items.filter((i) => i.status !== BudgetItemStatus.CANCELLED);
+    const active = consolidation.items.filter(
+      (i) => i.status !== BudgetItemStatus.CANCELLED,
+    );
 
     const incomeItems = active.filter((i) => i.type === TransactionType.INCOME);
-    const expenseItems = active.filter((i) => i.type === TransactionType.EXPENSE);
+    const expenseItems = active.filter(
+      (i) => i.type === TransactionType.EXPENSE,
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sum = (items: Item[], getValue: (i: Item) => any): number =>
@@ -343,11 +393,21 @@ export class ConsolidationService {
     // ─ By category ─
     const categoryMap = new Map<
       string,
-      { category: Item['category']; planned: number; realized: number; items: Item[] }
+      {
+        category: Item["category"];
+        planned: number;
+        realized: number;
+        items: Item[];
+      }
     >();
     for (const item of active) {
       if (!categoryMap.has(item.categoryId)) {
-        categoryMap.set(item.categoryId, { category: item.category, planned: 0, realized: 0, items: [] });
+        categoryMap.set(item.categoryId, {
+          category: item.category,
+          planned: 0,
+          realized: 0,
+          items: [],
+        });
       }
       const entry = categoryMap.get(item.categoryId)!;
       entry.planned += Number(item.amount);
@@ -358,11 +418,23 @@ export class ConsolidationService {
     // ─ By member ─
     const memberMap = new Map<
       string,
-      { member: Item['member']; planned: number; realized: number; items: Item[] }
+      {
+        member: Item["member"];
+        planned: number;
+        realized: number;
+        items: Item[];
+      }
     >();
-    for (const item of active.filter((i) => i.type === TransactionType.EXPENSE)) {
+    for (const item of active.filter(
+      (i) => i.type === TransactionType.EXPENSE,
+    )) {
       if (!memberMap.has(item.memberId)) {
-        memberMap.set(item.memberId, { member: item.member, planned: 0, realized: 0, items: [] });
+        memberMap.set(item.memberId, {
+          member: item.member,
+          planned: 0,
+          realized: 0,
+          items: [],
+        });
       }
       const entry = memberMap.get(item.memberId)!;
       entry.planned += Number(item.amount);
@@ -374,8 +446,16 @@ export class ConsolidationService {
       period: { month: consolidation.month, year: consolidation.year },
       status: consolidation.status,
       closedAt: consolidation.closedAt ?? null,
-      income: { planned: incomePlanned, realized: incomeRealized, pending: incomePending },
-      expense: { planned: expensePlanned, realized: expenseRealized, pending: expensePending },
+      income: {
+        planned: incomePlanned,
+        realized: incomeRealized,
+        pending: incomePending,
+      },
+      expense: {
+        planned: expensePlanned,
+        realized: expenseRealized,
+        pending: expensePending,
+      },
       balance: {
         planned: incomePlanned - expensePlanned,
         realized: incomeRealized - expenseRealized,
@@ -383,11 +463,17 @@ export class ConsolidationService {
       byCategory: Array.from(categoryMap.values()),
       byMember: Array.from(memberMap.values()),
       items: {
-        pending: consolidation.items.filter((i) => i.status === BudgetItemStatus.PENDING),
-        paid: consolidation.items.filter(
-          (i) => i.status === BudgetItemStatus.PAID || i.status === BudgetItemStatus.RECEIVED,
+        pending: consolidation.items.filter(
+          (i) => i.status === BudgetItemStatus.PENDING,
         ),
-        cancelled: consolidation.items.filter((i) => i.status === BudgetItemStatus.CANCELLED),
+        paid: consolidation.items.filter(
+          (i) =>
+            i.status === BudgetItemStatus.PAID ||
+            i.status === BudgetItemStatus.RECEIVED,
+        ),
+        cancelled: consolidation.items.filter(
+          (i) => i.status === BudgetItemStatus.CANCELLED,
+        ),
       },
     };
   }
@@ -400,7 +486,7 @@ export class ConsolidationService {
       include: {
         items: {
           include: { member: true, category: true, transaction: true },
-          orderBy: { dueDate: 'asc' },
+          orderBy: { dueDate: "asc" },
         },
       },
     });
@@ -412,16 +498,24 @@ export class ConsolidationService {
    * Closes the period. By default, refuses if there are PENDING items.
    * Pass force=true to close anyway (open items are left in place for historical reference).
    */
-  async closeConsolidation(userId: string, consolidationId: string, force = false) {
+  async closeConsolidation(
+    userId: string,
+    consolidationId: string,
+    force = false,
+  ) {
     const consolidation = await this.prisma.monthlyConsolidation.findFirst({
       where: { id: consolidationId, userId },
       include: {
-        items: { where: { status: BudgetItemStatus.PENDING }, select: { id: true } },
+        items: {
+          where: { status: BudgetItemStatus.PENDING },
+          select: { id: true },
+        },
       },
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
-    if (consolidation.status === 'CLOSED') {
-      throw new BadRequestException('Consolidação já está fechada');
+    if (!consolidation)
+      throw new NotFoundException("Consolidação não encontrada");
+    if (consolidation.status === "CLOSED") {
+      throw new BadRequestException("Consolidação já está fechada");
     }
 
     if (consolidation.items.length > 0 && !force) {
@@ -432,7 +526,7 @@ export class ConsolidationService {
 
     return this.prisma.monthlyConsolidation.update({
       where: { id: consolidationId },
-      data: { status: 'CLOSED', closedAt: new Date() },
+      data: { status: "CLOSED", closedAt: new Date() },
     });
   }
 
@@ -442,34 +536,41 @@ export class ConsolidationService {
     const consolidation = await this.prisma.monthlyConsolidation.findUnique({
       where: { id: consolidationId },
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+    if (!consolidation)
+      throw new NotFoundException("Consolidação não encontrada");
     if (consolidation.userId !== userId) throw new ForbiddenException();
 
     return this.prisma.$transaction(async (tx) => {
-      const items = await tx.budgetItem.findMany({ where: { consolidationId } });
+      const items = await tx.budgetItem.findMany({
+        where: { consolidationId },
+      });
 
       const transactionIds = items
         .map((i) => i.transactionId)
         .filter((id): id is string => id !== null);
 
       if (transactionIds.length > 0) {
-        await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } });
+        await tx.transaction.deleteMany({
+          where: { id: { in: transactionIds } },
+        });
       }
 
-      await tx.budgetItem.deleteMany({ where: { consolidationId, ruleId: null } });
+      await tx.budgetItem.deleteMany({
+        where: { consolidationId, ruleId: null },
+      });
 
       await tx.budgetItem.updateMany({
         where: { consolidationId },
-        data: { status: 'PENDING', transactionId: null },
+        data: { status: "PENDING", transactionId: null },
       });
 
       return tx.monthlyConsolidation.update({
         where: { id: consolidationId },
-        data: { status: 'OPEN', closedAt: null },
+        data: { status: "OPEN", closedAt: null },
         include: {
           items: {
             include: { member: true, category: true, transaction: true },
-            orderBy: { dueDate: 'asc' },
+            orderBy: { dueDate: "asc" },
           },
         },
       });
@@ -483,12 +584,15 @@ export class ConsolidationService {
       where: { id: consolidationId, userId },
       include: {
         items: {
-          where: { status: { in: [BudgetItemStatus.PAID, BudgetItemStatus.RECEIVED] } },
+          where: {
+            status: { in: [BudgetItemStatus.PAID, BudgetItemStatus.RECEIVED] },
+          },
           include: { transaction: true },
         },
       },
     });
-    if (!consolidation) throw new NotFoundException('Consolidação não encontrada');
+    if (!consolidation)
+      throw new NotFoundException("Consolidação não encontrada");
 
     const year = consolidation.year;
     const month = consolidation.month;
@@ -515,7 +619,7 @@ export class ConsolidationService {
       const { income, expense } = dailyMap.get(day)!;
       result.push({
         day,
-        date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        date: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
         income,
         expense,
         balance: income - expense,
@@ -530,7 +634,7 @@ export class ConsolidationService {
     const item = await this.prisma.budgetItem.findFirst({
       where: { id: budgetItemId, consolidation: { userId } },
     });
-    if (!item) throw new NotFoundException('Item não encontrado');
+    if (!item) throw new NotFoundException("Item não encontrado");
     return item;
   }
 
@@ -555,10 +659,15 @@ export class ConsolidationService {
     periodStart: Date,
     periodEnd: Date,
   ): Array<{ date: Date; description: string; installmentNumber?: number }> {
-    const results: Array<{ date: Date; description: string; installmentNumber?: number }> = [];
+    const results: Array<{
+      date: Date;
+      description: string;
+      installmentNumber?: number;
+    }> = [];
 
-    if (rule.ruleType === 'INSTALLMENT') {
-      const startMonthAbs = rule.startDate.getUTCFullYear() * 12 + rule.startDate.getUTCMonth();
+    if (rule.ruleType === "INSTALLMENT") {
+      const startMonthAbs =
+        rule.startDate.getUTCFullYear() * 12 + rule.startDate.getUTCMonth();
       const targetMonthAbs = year * 12 + (month - 1);
       const idx = targetMonthAbs - startMonthAbs;
 
@@ -576,7 +685,9 @@ export class ConsolidationService {
     const ruleStart = new Date(rule.startDate);
     if (ruleStart > periodEnd) return results; // rule hasn't started yet
 
-    const ruleEnd = rule.endDate ? new Date(rule.endDate) : this.addMonths(ruleStart, 18);
+    const ruleEnd = rule.endDate
+      ? new Date(rule.endDate)
+      : this.addMonths(ruleStart, 18);
     if (ruleEnd < periodStart) return results; // rule has already ended
 
     // Fast-forward to first occurrence on or after periodStart
@@ -588,10 +699,13 @@ export class ConsolidationService {
     // Collect occurrences within the period
     while (current <= periodEnd) {
       if (current >= ruleStart && (!rule.endDate || current <= ruleEnd)) {
-        results.push({ date: new Date(current), description: rule.description });
+        results.push({
+          date: new Date(current),
+          description: rule.description,
+        });
       }
       // MONTHLY and YEARLY produce at most one occurrence per calendar month
-      if (rule.recurrence !== 'WEEKLY') break;
+      if (rule.recurrence !== "WEEKLY") break;
       current = this.advance(current, rule.recurrence);
     }
 
@@ -606,10 +720,9 @@ export class ConsolidationService {
 
   private advance(date: Date, recurrence: string | null): Date {
     const d = new Date(date);
-    if (recurrence === 'MONTHLY') d.setMonth(d.getMonth() + 1);
-    else if (recurrence === 'WEEKLY') d.setDate(d.getDate() + 7);
-    else if (recurrence === 'YEARLY') d.setFullYear(d.getFullYear() + 1);
+    if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
+    else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
+    else if (recurrence === "YEARLY") d.setFullYear(d.getFullYear() + 1);
     return d;
   }
 }
-
