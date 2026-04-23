@@ -70,29 +70,29 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Card className="h-full flex flex-col">
+        <CardHeader className="pb-2 flex-shrink-0">
           <CardTitle className="text-base">Gastos por Categoria</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+        <CardContent className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="space-y-3">
             {rankedCategories.map((cat, index) => {
               const percentage = maxRealized > 0 ? (cat.realized / maxRealized) * 100 : 0;
               return (
                 <div
                   key={cat.category.id}
-                  className="cursor-pointer hover:bg-gray-50 p-2 rounded"
+                  className="cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
                   onClick={() => handleListClick(cat)}
                 >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-medium">{cat.category.name}</span>
-                    <span className="text-sm">{formatCurrency(cat.realized)}</span>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-sm font-medium truncate pr-2">{cat.category.name}</span>
+                    <span className="text-sm font-medium flex-shrink-0">{formatCurrency(cat.realized)}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="h-2 rounded-full"
+                      className="h-1.5 rounded-full transition-all"
                       style={{
-                        width: `${percentage}%`,
+                        width: `${Math.min(percentage, 100)}%`,
                         backgroundColor: getColorByIndex(index),
                       }}
                     ></div>
