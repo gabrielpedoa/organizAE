@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,12 +33,26 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
   const isExpense = item?.type === "EXPENSE";
   const { accounts } = useAccounts();
   const [selectedAccountId, setSelectedAccountId] = useState('');
-  const [date, setDate] = useState(todayISO());
-  const [amount, setAmount] = useState(item ? String(item.amount) : "");
+  const [date, setDate] = useState(() =>
+    item?.dueDate ? item.dueDate.split('T')[0] : todayISO()
+  );
+  const [amount, setAmount] = useState(() =>
+    item ? String(item.amount) : ""
+  );
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!item) return null;
+
+  // Sincronizar estados quando o item mudar
+  useEffect(() => {
+    if (item) {
+      setDate(item.dueDate.split('T')[0]);
+      setAmount(String(item.amount));
+      setNote('');
+      setSelectedAccountId('');
+    }
+  }, [item?.id]);
 
   const realAmount = parseFloat(amount) || 0;
   const diff = realAmount - Number(item.amount);
@@ -71,7 +85,7 @@ export function ConfirmPaymentModal({ item, onClose, onConfirm }: Props) {
 
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isExpense ? "Confirmar Pagamento" : "Confirmar Recebimento"}

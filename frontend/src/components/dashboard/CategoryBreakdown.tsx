@@ -105,19 +105,23 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
       </Card>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg max-h-[calc(100vh-4rem)] overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Lançamentos — {selectedCategory?.category.name} — {capitalizedMonth} {year}</SheetTitle>
+            <SheetTitle className="break-words">
+              Lançamentos —{" "}
+              <span className="truncate">{selectedCategory?.category.name}</span>{" "}
+              — {capitalizedMonth} {year}
+            </SheetTitle>
           </SheetHeader>
           <div className="mt-6 space-y-3">
             {selectedCategory?.items.map((item) => (
               <div key={item.id} className="p-3 border rounded">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     {getStatusIcon(item.status)}
-                    <span className="font-medium">{item.description}</span>
+                    <span className="font-medium truncate">{item.description}</span>
                   </div>
-                  {getItemBadge(item)}
+                  <div className="shrink-0">{getItemBadge(item)}</div>
                 </div>
                 <div className="text-sm text-muted-foreground mb-1">
                   {item.member.name}
@@ -126,7 +130,7 @@ export function CategoryBreakdown({ categories, month, year }: Props) {
                   {formatDueDate(item.dueDate, item.status, item.transaction)}
                 </div>
                 <div className="flex justify-between items-center mt-2">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm">Previsto: {formatCurrency(item.amount)}</div>
                     {item.transaction && (
                       <div className="text-sm text-green-600">

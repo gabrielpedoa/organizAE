@@ -303,7 +303,7 @@ export function ConsolidationPage() {
       <div className="space-y-3">
         {/* Linha 1: título + status */}
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Consolidação Mensal</h2>
+          <h2 className="hidden md:block text-2xl font-bold">Consolidação Mensal</h2>
           {consolidation && (
             <span className={cn(
               'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold',

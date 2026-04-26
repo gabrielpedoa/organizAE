@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Wallet, TrendingUp, TrendingDown, ArrowLeftRight, Plus, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle, History, Building2, User } from 'lucide-react';
 import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 import { ACCOUNT_TYPE_LABELS, INVESTMENT_PRODUCT_TYPE_LABELS, ACCOUNT_ENTRY_TYPE_LABELS } from '@/lib/constants';
 import { Account, AccountEntry, InvestmentPosition, Member } from '@/lib/types';
 import { useAccounts, CreateAccountPayload, UpdateAccountPayload, CreateInvestmentPayload, UpdateInvestmentPayload, TransferPayload } from '@/hooks/useAccounts';
@@ -68,7 +68,7 @@ function CreateAccountModal({ open, onClose, onSave, members }: CreateAccountMod
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova Conta</DialogTitle>
         </DialogHeader>
@@ -160,7 +160,7 @@ function EditAccountModal({ account, onClose, onSave }: EditAccountModalProps) {
 
   return (
     <Dialog open={!!account} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Conta</DialogTitle>
         </DialogHeader>
@@ -234,7 +234,7 @@ function AddInvestmentModal({ account, onClose, onSave }: AddInvestmentModalProp
 
   return (
     <Dialog open={!!account} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Novo Investimento</DialogTitle>
         </DialogHeader>
@@ -311,7 +311,7 @@ function EditInvestmentModal({ investment, onClose, onSave }: EditInvestmentModa
 
   return (
     <Dialog open={!!investment} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Investimento</DialogTitle>
         </DialogHeader>
@@ -403,7 +403,7 @@ function TransferModal({ open, onClose, onSave, accounts }: TransferModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Transferência entre Contas</DialogTitle>
         </DialogHeader>
@@ -564,82 +564,147 @@ interface AccountCardProps {
 
 function AccountCard({ account, onEdit, onDelete, onViewEntries, onAddInvestment, onEditInvestment, onDeleteInvestment }: AccountCardProps) {
   const totalInvested = account.investments.reduce((sum, inv) => sum + Number(inv.amount), 0);
+  const available = Number(account.balance);
+  const totalOnAccount = available + totalInvested;
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
+    <Card className="flex flex-col">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold truncate">
               {account.name}
             </CardTitle>
-            <p className="text-sm text-muted-foreground">{account.institution}</p>
+            <p className="text-sm text-muted-foreground truncate">{account.institution}</p>
           </div>
-          <span className="px-2 py-1 text-xs bg-secondary rounded-full">
+          <span className="shrink-0 px-2 py-0.5 text-xs bg-secondary text-secondary-foreground rounded-full whitespace-nowrap">
             {ACCOUNT_TYPE_LABELS[account.type]}
           </span>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-muted-foreground">Saldo</span>
-          <span className={`text-xl font-bold ${Number(account.balance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(Number(account.balance))}
-          </span>
+
+      <CardContent className="flex flex-col gap-4 flex-1">
+
+        {/* Saldos */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Disponível</span>
+            <span className={cn('font-semibold', available >= 0 ? 'text-green-600' : 'text-red-600')}>
+              {formatCurrency(available)}
+            </span>
+          </div>
+          {totalInvested > 0 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Investido</span>
+              <span className="font-semibold text-blue-600">
+                {formatCurrency(totalInvested)}
+              </span>
+            </div>
+          )}
+          {totalInvested > 0 && (
+            <>
+              <div className="border-t pt-2 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground font-medium">Total na conta</span>
+                <span className="font-bold text-foreground">
+                  {formatCurrency(totalOnAccount)}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
+        {/* Investimentos */}
         {account.investments.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Investimentos</p>
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Investimentos
+            </p>
             {account.investments.map(inv => (
-              <div key={inv.id} className="flex items-center justify-between text-sm p-2 bg-muted rounded">
-                <div>
-                  <p className="font-medium">{inv.name}</p>
-                  <p className="text-xs text-muted-foreground">{INVESTMENT_PRODUCT_TYPE_LABELS[inv.productType]}</p>
+              <div key={inv.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{inv.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {INVESTMENT_PRODUCT_TYPE_LABELS[inv.productType]}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-600">{formatCurrency(Number(inv.amount))}</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEditInvestment(inv)}>
-                    <Pencil className="h-3 w-3" />
+                <span className="text-sm font-semibold text-blue-600 shrink-0">
+                  {formatCurrency(Number(inv.amount))}
+                </span>
+                <div className="flex gap-0.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label={`Editar investimento ${inv.name}`}
+                    onClick={() => onEditInvestment(inv)}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => onDeleteInvestment(inv.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label={`Remover investimento ${inv.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remover investimento?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Remove "{inv.name}" da conta. Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => onDeleteInvestment(inv.id)}
+                        >
+                          Remover
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             ))}
-            <div className="flex justify-between text-sm font-medium pt-1">
-              <span>Total investido</span>
-              <span className="text-green-600">{formatCurrency(totalInvested)}</span>
-            </div>
           </div>
         )}
 
+        {/* Membros */}
         {account.members.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {account.members.map(m => (
-              <span key={m.memberId} className="px-2 py-0.5 text-xs bg-primary/10 rounded-full">
+              <span
+                key={m.memberId}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full"
+              >
+                <User className="h-3 w-3" />
                 {m.member.name}
               </span>
             ))}
           </div>
         )}
 
-        <div className="flex gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="h-3 w-3 mr-1" /> Editar
+        {/* Ações */}
+        <div className="grid grid-cols-2 gap-2 pt-1 mt-auto">
+          <Button variant="outline" size="sm" className="w-full" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Editar
           </Button>
-          <Button variant="outline" size="sm" onClick={onViewEntries}>
-            <History className="h-3 w-3 mr-1" /> Extrato
+          <Button variant="outline" size="sm" className="w-full" onClick={onViewEntries}>
+            <History className="h-3.5 w-3.5 mr-1.5" /> Extrato
           </Button>
-          <Button variant="outline" size="sm" onClick={onAddInvestment}>
-            <TrendingUp className="h-3 w-3 mr-1" /> + Investimento
+          <Button variant="outline" size="sm" className="w-full" onClick={onAddInvestment}>
+            <TrendingUp className="h-3.5 w-3.5 mr-1.5" /> Investimento
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-destructive">
-                <Trash2 className="h-3 w-3 mr-1" /> Excluir
+              <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive">
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Excluir
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -651,13 +716,17 @@ function AccountCard({ account, onEdit, onDelete, onViewEntries, onAddInvestment
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground">
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={onDelete}
+                >
                   Excluir
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
+
       </CardContent>
     </Card>
   );
@@ -667,7 +736,7 @@ function AccountCard({ account, onEdit, onDelete, onViewEntries, onAddInvestment
 
 export function AccountsPage() {
   const {
-    accounts, isLoading, totalBalance, totalInvested,
+    accounts, isLoading, totalBalance, totalInvested, totalNet,
     createAccount, updateAccount, removeAccount,
     createInvestment, updateInvestment, removeInvestment,
     transfer, getEntries,
@@ -744,37 +813,45 @@ export function AccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="hidden md:flex text-2xl font-bold items-center gap-2">
           <Wallet className="h-6 w-6" /> Contas
         </h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setTransferOpen(true)}>
-            <ArrowLeftRight className="h-4 w-4 mr-2" /> Transferência
+          <Button variant="outline" size="sm" onClick={() => setTransferOpen(true)}>
+            <ArrowLeftRight className="h-4 w-4 mr-1.5" />
+            <span className="hidden sm:inline">Transferência</span>
+            <span className="sm:hidden">Transferir</span>
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Nova conta
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" /> Nova conta
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Patrimônio líquido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold ${totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Disponível total</p>
+            <p className={cn('text-xl font-bold', totalBalance >= 0 ? 'text-green-600' : 'text-red-600')}>
               {formatCurrency(totalBalance)}
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total investido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalInvested)}</p>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Total investido</p>
+            <p className="text-xl font-bold text-blue-600">{formatCurrency(totalInvested)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Patrimônio total</p>
+            <p className={cn('text-xl font-bold', totalNet >= 0 ? 'text-green-600' : 'text-red-600')}>
+              {formatCurrency(totalNet)}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -788,7 +865,7 @@ export function AccountsPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           {accounts.map(account => (
             <AccountCard
               key={account.id}

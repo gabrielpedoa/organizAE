@@ -29,7 +29,7 @@ function EmptyDashboard({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <h2 className="hidden md:block text-2xl font-bold">Dashboard</h2>
         <div className="flex flex-wrap items-center gap-2">
           <MonthNavigator
             month={selectedMonth}
@@ -115,7 +115,7 @@ export function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Dashboard</h2>
+          <h2 className="hidden md:block text-2xl font-bold">Dashboard</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -137,7 +137,7 @@ export function DashboardPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Dashboard</h2>
+          <h2 className="hidden md:block text-2xl font-bold">Dashboard</h2>
         </div>
         <div className="text-center py-8">
           <p className="text-red-600">{error}</p>
@@ -165,7 +165,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <h2 className="hidden md:block text-2xl font-bold">Dashboard</h2>
         <div className="flex flex-wrap items-center gap-2">
           <MonthNavigator
             month={selectedMonth}

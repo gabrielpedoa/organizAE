@@ -198,166 +198,258 @@ function BulkDialog({
           <Sheet className="h-4 w-4 mr-1" /> Lançar em massa
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lançamento em massa — {label}</DialogTitle>
         </DialogHeader>
 
-        <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-sm border-collapse">
-            <thead className="sticky top-0 bg-muted z-10">
-              <tr>
-                <th className="text-left px-2 py-2 font-medium w-[28%]">
-                  Descrição
-                </th>
-                <th className="text-left px-2 py-2 font-medium w-[12%]">
-                  Valor (R$)
-                </th>
-                <th className="text-left px-2 py-2 font-medium w-[13%]">
-                  Data
-                </th>
+        <div className="max-h-[60vh] overflow-y-auto">
 
-                <th className="text-left px-2 py-2 font-medium w-[12%]">
-                  Tipo
-                </th>
-                {type === "EXPENSE" && (
-                  <th className="text-left px-2 py-2 font-medium w-[12%]">
-                    Tipo despesa
-                  </th>
-                )}
-                <th className="text-left px-2 py-2 font-medium w-[20%]">
-                  Membro
-                </th>
-                <th className="text-left px-2 py-2 font-medium w-[20%]">
-                  Categoria
-                </th>
-                <th className="w-[7%]"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => (
-                <tr
-                  key={row._id}
-                  className={cn(
-                    "border-t",
-                    idx % 2 === 0 ? "bg-background" : "bg-muted/20",
+          {/* Mobile: cards empilhados */}
+          <div className="md:hidden space-y-3 px-1">
+            {rows.map((row, idx) => (
+              <div key={row._id} className="rounded-lg border p-3 space-y-2 bg-card">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Lançamento {idx + 1}
+                  </span>
+                  {rows.length > 1 && (
+                    <button
+                      onClick={() => removeRow(row._id)}
+                      aria-label="Remover linha"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   )}
-                >
-                  <td className="px-2 py-1.5">
-                    <Input
-                      value={row.description}
-                      onChange={(e) =>
-                        updateRow(row._id, "description", e.target.value)
-                      }
-                      placeholder="Ex: Conta de luz"
-                      className="h-8 text-xs"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    value={row.description}
+                    onChange={(e) => updateRow(row._id, "description", e.target.value)}
+                    placeholder="Descrição"
+                    className="h-9 text-sm"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
                     <Input
                       value={row.amount}
-                      onChange={(e) =>
-                        updateRow(row._id, "amount", e.target.value)
-                      }
+                      onChange={(e) => updateRow(row._id, "amount", e.target.value)}
                       type="number"
                       step="0.01"
                       min="0.01"
-                      placeholder="0,00"
-                      className="h-8 text-xs"
+                      placeholder="Valor"
+                      className="h-9 text-sm"
                     />
-                  </td>
-                  <td className="px-2 py-1.5">
                     <Input
                       value={row.date}
-                      onChange={(e) =>
-                        updateRow(row._id, "date", e.target.value)
-                      }
+                      onChange={(e) => updateRow(row._id, "date", e.target.value)}
                       type="date"
-                      className="h-8 text-xs"
+                      className="h-9 text-sm"
                     />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select
-                      value={row.mode}
-                      onValueChange={(v) => updateRow(row._id, "mode", v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
+                  </div>
+                  <Select value={row.mode} onValueChange={(v) => updateRow(row._id, "mode", v)}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recurring">Recorrente</SelectItem>
+                      <SelectItem value="installment">Parcelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {type === "EXPENSE" && (
+                    <Select value={row.expenseType} onValueChange={(v) => updateRow(row._id, "expenseType", v)}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Tipo de despesa" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="recurring">Recorrente</SelectItem>
-                        <SelectItem value="installment">Parcelado</SelectItem>
+                        <SelectItem value="FIXED">Fixa</SelectItem>
+                        <SelectItem value="VARIABLE">Variável</SelectItem>
+                        <SelectItem value="INVESTMENT">Investimento</SelectItem>
+                        <SelectItem value="TRANSFER">Transferência</SelectItem>
                       </SelectContent>
                     </Select>
-                  </td>
+                  )}
+                  <Select value={row.memberId} onValueChange={(v) => updateRow(row._id, "memberId", v)}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Membro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={row.categoryId} onValueChange={(v) => updateRow(row._id, "categoryId", v)}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="Categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ))}
+          </div>
 
+          {/* Desktop: tabela original */}
+          <div className="hidden md:block">
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 bg-muted z-10">
+                <tr>
+                  <th className="text-left px-2 py-2 font-medium w-[28%]">
+                    Descrição
+                  </th>
+                  <th className="text-left px-2 py-2 font-medium w-[12%]">
+                    Valor (R$)
+                  </th>
+                  <th className="text-left px-2 py-2 font-medium w-[13%]">
+                    Data
+                  </th>
+
+                  <th className="text-left px-2 py-2 font-medium w-[12%]">
+                    Tipo
+                  </th>
                   {type === "EXPENSE" && (
+                    <th className="text-left px-2 py-2 font-medium w-[12%]">
+                      Tipo despesa
+                    </th>
+                  )}
+                  <th className="text-left px-2 py-2 font-medium w-[20%]">
+                    Membro
+                  </th>
+                  <th className="text-left px-2 py-2 font-medium w-[20%]">
+                    Categoria
+                  </th>
+                  <th className="w-[7%]"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => (
+                  <tr
+                    key={row._id}
+                    className={cn(
+                      "border-t",
+                      idx % 2 === 0 ? "bg-background" : "bg-muted/20",
+                    )}
+                  >
+                    <td className="px-2 py-1.5">
+                      <Input
+                        value={row.description}
+                        onChange={(e) =>
+                          updateRow(row._id, "description", e.target.value)
+                        }
+                        placeholder="Ex: Conta de luz"
+                        className="h-8 text-xs"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        value={row.amount}
+                        onChange={(e) =>
+                          updateRow(row._id, "amount", e.target.value)
+                        }
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        placeholder="0,00"
+                        className="h-8 text-xs"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        value={row.date}
+                        onChange={(e) =>
+                          updateRow(row._id, "date", e.target.value)
+                        }
+                        type="date"
+                        className="h-8 text-xs"
+                      />
+                    </td>
                     <td className="px-2 py-1.5">
                       <Select
-                        value={row.expenseType}
-                        onValueChange={(v) => updateRow(row._id, "expenseType", v)}
+                        value={row.mode}
+                        onValueChange={(v) => updateRow(row._id, "mode", v)}
                       >
                         <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Tipo" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="FIXED">Fixa</SelectItem>
-                          <SelectItem value="VARIABLE">Variável</SelectItem>
-                          <SelectItem value="INVESTMENT">Investimento</SelectItem>
-                          <SelectItem value="TRANSFER">Transferência</SelectItem>
+                          <SelectItem value="recurring">Recorrente</SelectItem>
+                          <SelectItem value="installment">Parcelado</SelectItem>
                         </SelectContent>
                       </Select>
                     </td>
-                  )}
-                  <td className="px-2 py-1.5">
-                    <Select
-                      value={row.memberId}
-                      onValueChange={(v) => updateRow(row._id, "memberId", v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Membro" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {members.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select
-                      value={row.categoryId}
-                      onValueChange={(v) => updateRow(row._id, "categoryId", v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredCategories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    {rows.length > 1 && (
-                      <button
-                        onClick={() => removeRow(row._id)}
-                        aria-label="Remover linha"
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+
+                    {type === "EXPENSE" && (
+                      <td className="px-2 py-1.5">
+                        <Select
+                          value={row.expenseType}
+                          onValueChange={(v) => updateRow(row._id, "expenseType", v)}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="FIXED">Fixa</SelectItem>
+                            <SelectItem value="VARIABLE">Variável</SelectItem>
+                            <SelectItem value="INVESTMENT">Investimento</SelectItem>
+                            <SelectItem value="TRANSFER">Transferência</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <td className="px-2 py-1.5">
+                      <Select
+                        value={row.memberId}
+                        onValueChange={(v) => updateRow(row._id, "memberId", v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Membro" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {members.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Select
+                        value={row.categoryId}
+                        onValueChange={(v) => updateRow(row._id, "categoryId", v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filteredCategories.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      {rows.length > 1 && (
+                        <button
+                          onClick={() => removeRow(row._id)}
+                          aria-label="Remover linha"
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t">
@@ -560,9 +652,9 @@ export function TransactionsPage({ type }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{title}</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="hidden md:block text-2xl font-bold">{title}</h2>
+        <div className="flex items-center gap-2 ml-auto">
           <BulkDialog
             type={type}
             members={members}
@@ -579,10 +671,11 @@ export function TransactionsPage({ type }: Props) {
             <DialogTrigger asChild>
               <Button size="sm">
                 <Plus className="h-4 w-4 mr-1" />
-                {label}
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">Nova regra</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{label}</DialogTitle>
               </DialogHeader>
@@ -616,7 +709,7 @@ export function TransactionsPage({ type }: Props) {
                   <Input name="description" required />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label>
                       {mode === "recurring" && isVariable
@@ -644,7 +737,7 @@ export function TransactionsPage({ type }: Props) {
 
                 {mode === "recurring" && (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label>Periodicidade</Label>
                         <Select

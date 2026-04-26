@@ -126,6 +126,7 @@ export function useAccounts() {
     (sum, a) => sum + a.investments.reduce((s, i) => s + Number(i.amount), 0),
     0,
   );
+  const totalNet = totalBalance + totalInvested;
 
   return {
     accounts,
@@ -133,6 +134,7 @@ export function useAccounts() {
     error,
     totalBalance,
     totalInvested,
+    totalNet,
     createAccount,
     updateAccount,
     removeAccount,

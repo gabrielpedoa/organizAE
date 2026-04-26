@@ -379,14 +379,21 @@ export class ConsolidationService {
       throw new NotFoundException("Consolidação não encontrada");
 
     type Item = (typeof consolidation.items)[number];
+
+    // Itens que entram no planned:
+    // - todos os que vieram de regra (recorrente/parcelado), qualquer status
+    // - avulsos apenas se não foram cancelados
+    const plannedItems = consolidation.items.filter(
+      (i) => i.ruleId !== null || i.status !== BudgetItemStatus.CANCELLED,
+    );
+
+    // Itens ativos para byCategory e byMember: excluir cancelados
     const active = consolidation.items.filter(
       (i) => i.status !== BudgetItemStatus.CANCELLED,
     );
 
-    const incomeItems = active.filter((i) => i.type === TransactionType.INCOME);
-    const expenseItems = active.filter(
-      (i) => i.type === TransactionType.EXPENSE,
-    );
+    const incomeItems = plannedItems.filter((i) => i.type === TransactionType.INCOME);
+    const expenseItems = plannedItems.filter((i) => i.type === TransactionType.EXPENSE);
 
     const sum = (items: Item[], getValue: (i: Item) => unknown): number =>
       items.reduce((s, i) => s + Number(getValue(i) ?? 0), 0);
@@ -437,6 +444,9 @@ export class ConsolidationService {
     }
 
     // ─ By member ─
+    // planned: itens de regra (qualquer status) + avulsos não cancelados
+    // realized: apenas itens confirmados (com transaction)
+    // items: todos (incluindo cancelados) — frontend filtra para exibição
     const memberMap = new Map<
       string,
       {
@@ -446,9 +456,12 @@ export class ConsolidationService {
         items: Item[];
       }
     >();
-    for (const item of active.filter(
+
+    const plannedExpenseItems = plannedItems.filter(
       (i) => i.type === TransactionType.EXPENSE,
-    )) {
+    );
+
+    for (const item of plannedExpenseItems) {
       if (!memberMap.has(item.memberId)) {
         memberMap.set(item.memberId, {
           member: item.member,
@@ -459,7 +472,9 @@ export class ConsolidationService {
       }
       const entry = memberMap.get(item.memberId)!;
       entry.planned += Number(item.amount);
-      if (item.transaction) entry.realized += Number(item.transaction.amount);
+      if (item.transaction) {
+        entry.realized += Number(item.transaction.amount);
+      }
       entry.items.push(item);
     }
 
